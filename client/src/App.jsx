@@ -15,14 +15,9 @@ const AdminDashboardPage = lazy(() => import('./pages/admin/AdminDashboardPage')
 const EmployeesPage = lazy(() => import('./pages/admin/EmployeesPage'));
 const EmployeePerformancePage = lazy(() => import('./pages/admin/EmployeePerformancePage'));
 const DepartmentsPage = lazy(() => import('./pages/admin/DepartmentsPage'));
-const TeamsPage = lazy(() => import('./pages/admin/TeamsPage'));
-const ProjectsPage = lazy(() => import('./pages/admin/ProjectsPage'));
-const TaskCategoriesPage = lazy(() => import('./pages/admin/TaskCategoriesPage'));
 const ActivityLogsPage = lazy(() => import('./pages/admin/ActivityLogsPage'));
-const AdminAttendancePage = lazy(() => import('./pages/admin/AttendancePage'));
 
 const EmployeeDashboardPage = lazy(() => import('./pages/employee/EmployeeDashboardPage'));
-const EmployeeAttendancePage = lazy(() => import('./pages/employee/AttendancePage'));
 
 const TasksPage = lazy(() => import('./pages/shared/TasksPage'));
 const ReportsPage = lazy(() => import('./pages/shared/ReportsPage'));
@@ -75,11 +70,7 @@ export default function App() {
               <Route path="/admin/tasks" element={<TasksPage />} />
               <Route path="/admin/reports" element={<ReportsPage />} />
               <Route path="/admin/departments" element={<DepartmentsPage />} />
-              <Route path="/admin/teams" element={<TeamsPage />} />
-              <Route path="/admin/projects" element={<ProjectsPage />} />
-              <Route path="/admin/task-categories" element={<TaskCategoriesPage />} />
               <Route path="/admin/activity-logs" element={<ActivityLogsPage />} />
-              <Route path="/admin/attendance" element={<AdminAttendancePage />} />
             </Route>
 
             {/* Employee only */}
@@ -87,7 +78,6 @@ export default function App() {
               <Route path="/employee/dashboard" element={<EmployeeDashboardPage />} />
               <Route path="/employee/tasks" element={<TasksPage />} />
               <Route path="/employee/reports" element={<ReportsPage />} />
-              <Route path="/employee/attendance" element={<EmployeeAttendancePage />} />
             </Route>
           </Route>
         </Route>
