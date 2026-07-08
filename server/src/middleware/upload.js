@@ -61,6 +61,18 @@ const uploadProfilePhoto = multer({
   limits: { fileSize: 5 * 1024 * 1024, files: 1 },
 }).single('profilePhoto');
 
+const uploadCsv = multer({
+  storage: makeStorage('csvs'),
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ext === '.csv' || file.mimetype === 'text/csv' || file.mimetype === 'application/vnd.ms-excel') {
+      return cb(null, true);
+    }
+    cb(new Error('Only CSV files are allowed'), false);
+  },
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+}).single('file');
+
 const wrapMulter = (middleware) => (req, res, next) => {
   middleware(req, res, (err) => {
     if (err) {
@@ -73,5 +85,6 @@ const wrapMulter = (middleware) => (req, res, next) => {
 module.exports = {
   uploadAttachments: wrapMulter(uploadAttachments),
   uploadProfilePhoto: wrapMulter(uploadProfilePhoto),
+  uploadCsv: wrapMulter(uploadCsv),
   UPLOAD_ROOT,
 };

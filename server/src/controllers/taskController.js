@@ -1,4 +1,8 @@
 const Task = require('../models/Task');
+const User = require('../models/User');
+const Department = require('../models/Department');
+const { parseCsvFile } = require('../utils/csvParser');
+const fs = require('fs');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { logActivity } = require('../utils/activityLogger');
@@ -360,6 +364,139 @@ const bulkDelete = asyncHandler(async (req, res) => {
   res.json({ success: true, data: { deleted: result.deletedCount } });
 });
 
+// POST /tasks/import-csv
+const importCsvTasks = asyncHandler(async (req, res) => {
+  if (!req.file) {
+    throw new ApiError(400, 'Please upload a CSV file');
+  }
+
+  const filePath = req.file.path;
+  let parsedRows;
+
+  try {
+    parsedRows = parseCsvFile(filePath);
+  } catch (err) {
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    throw new ApiError(400, `Failed to parse CSV file: ${err.message}`);
+  }
+
+  let skippedCount = 0;
+  let successCount = 0;
+
+  function parseDate(dateStr) {
+    if (!dateStr) return new Date();
+    const parts = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+    if (parts) {
+      const day = parseInt(parts[1], 10);
+      const month = parseInt(parts[2], 10) - 1; // 0-indexed
+      const year = parseInt(parts[3], 10);
+      const hour = parseInt(parts[4] || '0', 10);
+      const minute = parseInt(parts[5] || '0', 10);
+      const second = parseInt(parts[6] || '0', 10);
+      return new Date(year, month, day, hour, minute, second);
+    }
+    const parsed = new Date(dateStr);
+    return isNaN(parsed.getTime()) ? new Date() : parsed;
+  }
+
+  for (const row of parsedRows) {
+    const timestamp = row['Timestamp'] || '';
+    const yourName = row['Your Name'] || '';
+    const deptName = row['Vertical / Department'] || '';
+    const taskName = row['Task Name '] || row['Task Name'] || '';
+    const processSteps = row['Step-by-Step Process '] || row['Step-by-Step Process'] || '';
+    const whoDoes = row['Who Currently Does This? '] || row['Who Currently Does This?'] || '';
+    const howOften = row['How Often? '] || row['How Often?'] || '';
+    const timePerOccur = row['Time Per Occurrence '] || row['Time Per Occurrence'] || '';
+    const toolsUsed = row['Tools / Platforms Used '] || row['Tools / Platforms Used'] || '';
+    const painLevel = row['Pain Level '] || row['Pain Level'] || '';
+    const addNotes = row['Additional Notes / Edge Cases '] || row['Additional Notes / Edge Cases'] || '';
+
+    if (!taskName) {
+      skippedCount++;
+      continue;
+    }
+
+    let assignedToId = req.user._id;
+    if (yourName) {
+      const matchedUser = await User.findOne({ name: { $regex: new RegExp(`^${yourName.trim()}$`, 'i') } });
+      if (matchedUser) {
+        assignedToId = matchedUser._id;
+      }
+    }
+
+    let departmentId = null;
+    if (deptName) {
+      let deptDoc = await Department.findOne({ name: { $regex: new RegExp(`^${deptName.trim()}$`, 'i') } });
+      if (!deptDoc) {
+        deptDoc = await Department.create({ name: deptName.trim() });
+      }
+      departmentId = deptDoc._id;
+    }
+
+    let priority = 'medium';
+    const pain = painLevel.toLowerCase();
+    if (pain.includes('low')) priority = 'low';
+    else if (pain.includes('high')) priority = 'high';
+    else if (pain.includes('urgent') || pain.includes('severe') || pain.includes('critical')) priority = 'urgent';
+
+    const taskDate = parseDate(timestamp);
+
+    const startOfDay = new Date(taskDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(taskDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const duplicate = await Task.findOne({
+      title: taskName.trim(),
+      assignedTo: assignedToId,
+      taskDate: { $gte: startOfDay, $lte: endOfDay },
+    });
+
+    if (duplicate) {
+      skippedCount++;
+      continue;
+    }
+
+    const descriptionParts = [];
+    if (processSteps) descriptionParts.push(`**Step-by-Step Process:**\n${processSteps}`);
+    if (whoDoes) descriptionParts.push(`**Who Currently Does This?:** ${whoDoes}`);
+    if (howOften) descriptionParts.push(`**How Often?:** ${howOften}`);
+    if (timePerOccur) descriptionParts.push(`**Time Per Occurrence:** ${timePerOccur}`);
+    if (toolsUsed) descriptionParts.push(`**Tools / Platforms Used:** ${toolsUsed}`);
+
+    const description = descriptionParts.join('\n\n');
+    const remarks = addNotes ? `Additional Notes: ${addNotes}` : '';
+
+    await Task.create({
+      title: taskName.trim(),
+      description,
+      department: departmentId,
+      assignedTo: assignedToId,
+      priority,
+      taskDate,
+      remarks,
+      status: 'pending',
+      createdBy: req.user._id,
+    });
+
+    successCount++;
+  }
+
+  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+
+  await logActivity(req.user._id, 'import-tasks-csv', { count: successCount }, req.ip);
+
+  res.json({
+    success: true,
+    data: {
+      successCount,
+      skippedCount,
+      totalCount: parsedRows.length,
+    },
+  });
+});
+
 module.exports = {
   listTasks,
   copyPrevious,
@@ -371,4 +508,5 @@ module.exports = {
   duplicateTask,
   bulkUpdate,
   bulkDelete,
+  importCsvTasks,
 };

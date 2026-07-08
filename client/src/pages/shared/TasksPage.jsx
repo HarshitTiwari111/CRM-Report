@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
@@ -12,6 +12,7 @@ import {
   FiArchive,
   FiClipboard,
   FiX,
+  FiUpload,
 } from 'react-icons/fi';
 import {
   PageHeader,
@@ -34,6 +35,7 @@ import {
   bulkUpdateTasks,
   bulkDeleteTasks,
   getCopyPreviousTasks,
+  importCsvTasks,
 } from '../../api/tasks';
 import { getProjects, getDepartments } from '../../api/metadata';
 import { getUsers } from '../../api/users';
@@ -43,6 +45,7 @@ import TaskFormModal from '../../features/tasks/TaskFormModal';
 export default function TasksPage() {
   const { isSuperAdmin } = useAuth();
   const [searchParams] = useSearchParams();
+  const fileInputRef = useRef(null);
 
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
@@ -64,6 +67,33 @@ export default function TasksPage() {
 
   const debouncedSearch = useDebounce(search);
   const queryClient = useQueryClient();
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['tasks'] });
+
+  const importMutation = useMutation({
+    mutationFn: importCsvTasks,
+    onSuccess: (res) => {
+      const { successCount, skippedCount } = res.data.data;
+      toast.success(`Successfully imported ${successCount} tasks. Skipped ${skippedCount} duplicate tasks.`);
+      invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to import CSV file');
+    },
+  });
+
+  const handleImportCsvClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    importMutation.mutate(formData);
+    e.target.value = '';
+  };
 
   const { data: projects } = useQuery({
     queryKey: ['projects', 'all'],
@@ -107,8 +137,7 @@ export default function TasksPage() {
     keepPreviousData: true,
   });
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['tasks'] });
-
+  // Handlers below invalidate functions
   const deleteMutation = useMutation({
     mutationFn: deleteTask,
     onSuccess: () => {
@@ -250,11 +279,28 @@ export default function TasksPage() {
 
   return (
     <div>
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        accept=".csv"
+        className="hidden"
+      />
       <PageHeader
         title={isSuperAdmin ? 'All Tasks' : 'My Tasks'}
         subtitle="Track, filter and manage daily tasks"
         actions={
           <div className="flex gap-2">
+            {isSuperAdmin && (
+              <Button
+                variant="outline"
+                icon={FiUpload}
+                onClick={handleImportCsvClick}
+                isLoading={importMutation.isPending}
+              >
+                Import from Google Sheet
+              </Button>
+            )}
             <Button variant="outline" icon={FiClipboard} onClick={handleCopyPrevious}>
               Copy Previous Task
             </Button>

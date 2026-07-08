@@ -10,10 +10,11 @@ const {
   duplicateTask,
   bulkUpdate,
   bulkDelete,
+  importCsvTasks,
 } = require('../controllers/taskController');
 const { protect } = require('../middleware/auth');
 const validate = require('../middleware/validate');
-const { uploadAttachments } = require('../middleware/upload');
+const { uploadAttachments, uploadCsv } = require('../middleware/upload');
 const {
   createTaskValidator,
   updateTaskValidator,
@@ -27,6 +28,7 @@ const router = express.Router();
 
 router.use(protect);
 
+router.post('/import-csv', uploadCsv, importCsvTasks);
 router.get('/copy-previous', copyPrevious);
 router.get('/', listTasks);
 router.post('/', uploadAttachments, createTaskValidator, validate, createTask);

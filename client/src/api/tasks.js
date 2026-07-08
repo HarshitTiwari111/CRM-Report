@@ -26,3 +26,8 @@ export const bulkUpdateTasks = (ids, update) =>
 export const bulkDeleteTasks = (ids) => axiosInstance.post('/tasks/bulk-delete', { ids });
 
 export const getCopyPreviousTasks = () => axiosInstance.get('/tasks/copy-previous');
+
+export const importCsvTasks = (formData) =>
+  axiosInstance.post('/tasks/import-csv', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
