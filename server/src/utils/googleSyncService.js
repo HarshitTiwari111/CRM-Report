@@ -81,7 +81,7 @@ const syncSingleSheet = async (config) => {
 };
 
 const syncAllActiveSheets = async () => {
-  const configs = await GoogleSheetConfig.find({ isActive: true });
+  const configs = await GoogleSheetConfig.find({ isActive: true, syncMode: 'pull' });
   for (const config of configs) {
     try {
       await syncSingleSheet(config);

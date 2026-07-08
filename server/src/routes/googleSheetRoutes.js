@@ -94,7 +94,7 @@ router.post(
       throw new ApiError(403, 'Access denied. Superadmins only.');
     }
 
-    const { url, name } = req.body;
+    const { url, name, syncMode } = req.body;
     if (!url) {
       throw new ApiError(400, 'Google Sheet URL is required');
     }
@@ -104,18 +104,27 @@ router.post(
     if (config) {
       config.url = url;
       if (name) config.name = name;
+      if (syncMode) config.syncMode = syncMode;
+      // Clear previous sync error when URL/mode changes
+      config.syncError = '';
     } else {
-      config = new GoogleSheetConfig({ url, name: name || 'Tasks Sheet' });
+      config = new GoogleSheetConfig({
+        url,
+        name: name || 'Tasks Sheet',
+        syncMode: syncMode || 'pull',
+      });
     }
 
     await config.save();
 
-    // Try initial sync immediately
-    try {
-      await syncSingleSheet(config);
-    } catch (err) {
-      config.syncError = err.message;
-      await config.save();
+    // Try initial sync immediately (only for public pull-mode sheets)
+    if (config.syncMode === 'pull') {
+      try {
+        await syncSingleSheet(config);
+      } catch (err) {
+        config.syncError = err.message;
+        await config.save();
+      }
     }
 
     res.status(201).json({ success: true, data: config });
