@@ -28,6 +28,12 @@ const startOfMonth = () => {
 
 const countTasks = (filter) => Task.countDocuments(filter);
 
+const REPORT_ACTION_LABELS = {
+  'export-report-pdf': 'PDF Report',
+  'export-report-excel': 'Excel Report',
+  'export-report-csv': 'CSV Report',
+};
+
 // GET /dashboard/admin
 const adminDashboard = asyncHandler(async (req, res) => {
   const today = { $gte: startOfDay(), $lte: endOfDay() };
@@ -43,7 +49,9 @@ const adminDashboard = asyncHandler(async (req, res) => {
     lateCount,
     weeklyCount,
     monthlyCount,
-    recentActivity,
+    latestTasks,
+    latestLogins,
+    latestReportLogs,
   ] = await Promise.all([
     User.countDocuments({ role: 'employee' }),
     Department.countDocuments(),
@@ -55,17 +63,29 @@ const adminDashboard = asyncHandler(async (req, res) => {
     countTasks({ status: { $in: ['pending', 'in-progress'] }, expectedCompletion: { $lt: new Date() } }),
     countTasks({ taskDate: { $gte: startOfWeek() } }),
     countTasks({ taskDate: { $gte: startOfMonth() } }),
-    ActivityLog.find().populate('user', 'name email').sort({ createdAt: -1 }).limit(15),
+    Task.find().populate('assignedTo', 'name').sort({ createdAt: -1 }).limit(5).select('title status assignedTo createdAt'),
+    User.find({ lastLogin: { $exists: true, $ne: null } }).sort({ lastLogin: -1 }).limit(5).select('name lastLogin'),
+    ActivityLog.find({ action: { $in: Object.keys(REPORT_ACTION_LABELS) } })
+      .populate('user', 'name')
+      .sort({ createdAt: -1 })
+      .limit(5),
   ]);
+
+  const latestReports = latestReportLogs.map((log) => ({
+    _id: log._id,
+    type: REPORT_ACTION_LABELS[log.action] || log.action,
+    generatedBy: log.user?.name,
+    createdAt: log.createdAt,
+  }));
 
   res.json({
     success: true,
     data: {
       cards: {
         totalEmployees,
-        totalDepartments,
-        totalTeams,
-        today: todayCount,
+        departments: totalDepartments,
+        teams: totalTeams,
+        todayTasks: todayCount,
         completed: completedCount,
         pending: pendingCount,
         inProgress: inProgressCount,
@@ -73,7 +93,7 @@ const adminDashboard = asyncHandler(async (req, res) => {
         weekly: weeklyCount,
         monthly: monthlyCount,
       },
-      recentActivity,
+      recentActivity: { latestTasks, latestLogins, latestReports },
     },
   });
 });
@@ -83,33 +103,57 @@ const employeeDashboard = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const today = { $gte: startOfDay(), $lte: endOfDay() };
 
-  const [todayCount, completedCount, pendingCount, inProgressCount, overdueCount, weeklyCount, monthlyCount] =
-    await Promise.all([
-      countTasks({ assignedTo: userId, taskDate: today }),
-      countTasks({ assignedTo: userId, status: 'completed' }),
-      countTasks({ assignedTo: userId, status: 'pending' }),
-      countTasks({ assignedTo: userId, status: 'in-progress' }),
-      countTasks({
-        assignedTo: userId,
-        status: { $in: ['pending', 'in-progress'] },
-        expectedCompletion: { $lt: new Date() },
-      }),
-      countTasks({ assignedTo: userId, taskDate: { $gte: startOfWeek() } }),
-      countTasks({ assignedTo: userId, taskDate: { $gte: startOfMonth() } }),
-    ]);
+  const [
+    todayCount,
+    completedCount,
+    pendingCount,
+    inProgressCount,
+    overdueCount,
+    weeklyCount,
+    monthlyCount,
+    recentTasks,
+    upcomingDeadlines,
+  ] = await Promise.all([
+    countTasks({ assignedTo: userId, taskDate: today }),
+    countTasks({ assignedTo: userId, status: 'completed' }),
+    countTasks({ assignedTo: userId, status: 'pending' }),
+    countTasks({ assignedTo: userId, status: 'in-progress' }),
+    countTasks({
+      assignedTo: userId,
+      status: { $in: ['pending', 'in-progress'] },
+      expectedCompletion: { $lt: new Date() },
+    }),
+    countTasks({ assignedTo: userId, taskDate: { $gte: startOfWeek() } }),
+    countTasks({ assignedTo: userId, taskDate: { $gte: startOfMonth() } }),
+    Task.find({ assignedTo: userId })
+      .populate('project', 'name')
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .select('title project priority status createdAt'),
+    Task.find({
+      assignedTo: userId,
+      status: { $in: ['pending', 'in-progress'] },
+      expectedCompletion: { $gte: new Date() },
+    })
+      .sort({ expectedCompletion: 1 })
+      .limit(5)
+      .select('title expectedCompletion priority'),
+  ]);
 
   res.json({
     success: true,
     data: {
       cards: {
-        today: todayCount,
+        todayTasks: todayCount,
         completed: completedCount,
         pending: pendingCount,
         inProgress: inProgressCount,
         overdue: overdueCount,
-        weekly: weeklyCount,
-        monthly: monthlyCount,
+        weeklySummary: weeklyCount,
+        monthlySummary: monthlyCount,
       },
+      recentTasks,
+      upcomingDeadlines,
     },
   });
 });

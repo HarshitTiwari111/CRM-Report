@@ -1,14 +1,14 @@
 import { cn } from '../../utils/cn';
 
 const colorMap = {
-  slate: 'bg-slate-100 text-slate-700',
-  indigo: 'bg-primary-100 text-primary-700',
-  green: 'bg-emerald-100 text-emerald-700',
-  yellow: 'bg-amber-100 text-amber-700',
-  red: 'bg-red-100 text-red-700',
-  blue: 'bg-sky-100 text-sky-700',
-  purple: 'bg-purple-100 text-purple-700',
-  orange: 'bg-orange-100 text-orange-700',
+  slate: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200',
+  indigo: 'bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300',
+  green: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+  yellow: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+  red: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+  blue: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
+  purple: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+  orange: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
 };
 
 // Domain-specific mappers so components don't repeat this logic

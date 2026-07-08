@@ -8,14 +8,14 @@ import { useAuth } from '../../hooks/useAuth';
 import { adminNav, employeeNav } from './navConfig';
 
 function NavItem({ item, onNavigate }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   if (item.children) {
     return (
       <div className="mb-1">
         <button
           onClick={() => setOpen((o) => !o)}
-          className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100"
+          className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/10 hover:text-white"
         >
           <span className="flex items-center gap-2.5">
             <item.icon className="h-4 w-4" />
@@ -24,7 +24,7 @@ function NavItem({ item, onNavigate }) {
           <FiChevronDown className={cn('h-3.5 w-3.5 transition-transform', open && 'rotate-180')} />
         </button>
         {open && (
-          <div className="ml-4 mt-0.5 flex flex-col gap-0.5 border-l border-slate-200 pl-3">
+          <div className="ml-4 mt-0.5 flex flex-col gap-0.5 border-l border-white/10 pl-3">
             {item.children.map((child) => (
               <NavItem key={child.to} item={child} onNavigate={onNavigate} />
             ))}
@@ -42,7 +42,7 @@ function NavItem({ item, onNavigate }) {
       className={({ isActive }) =>
         cn(
           'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-          isActive ? 'bg-primary-50 text-primary-700' : 'text-slate-600 hover:bg-slate-100'
+          isActive ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/10 hover:text-white'
         )
       }
     >
@@ -65,16 +65,16 @@ export default function Sidebar() {
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-600 text-white">
             <FiCheckSquare className="h-4 w-4" />
           </div>
-          <span className="text-sm font-semibold text-slate-800">Task CRM</span>
+          <span className="text-sm font-semibold text-white">TaskPulse</span>
         </div>
         <button
           onClick={() => dispatch(closeSidebar())}
-          className="rounded-md p-1 text-slate-400 hover:bg-slate-100 lg:hidden"
+          className="rounded-md p-1 text-slate-300 hover:bg-white/10 lg:hidden"
         >
           <FiX className="h-5 w-5" />
         </button>
       </div>
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pb-4">
+      <nav className="scrollbar-hide flex-1 space-y-0.5 overflow-y-auto px-3 pb-4">
         {nav.map((item) => (
           <NavItem key={item.to || item.label} item={item} onNavigate={() => dispatch(closeSidebar())} />
         ))}
@@ -85,13 +85,13 @@ export default function Sidebar() {
   return (
     <>
       {/* Desktop */}
-      <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white lg:block">{content}</aside>
+      <aside className="hidden w-64 shrink-0 border-r border-slate-700 bg-slate-800 lg:block">{content}</aside>
 
       {/* Mobile drawer */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <div className="absolute inset-0 bg-slate-900/50" onClick={() => dispatch(closeSidebar())} />
-          <aside className="absolute left-0 top-0 h-full w-64 bg-white shadow-xl">{content}</aside>
+          <aside className="absolute left-0 top-0 h-full w-64 bg-slate-800 shadow-xl">{content}</aside>
         </div>
       )}
     </>

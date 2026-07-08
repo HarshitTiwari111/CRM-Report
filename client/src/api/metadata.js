@@ -20,9 +20,6 @@ export const deleteProject = (id) => axiosInstance.delete(`/projects/${id}`);
 
 // Clients
 export const getClients = (params) => axiosInstance.get('/clients', { params });
-export const createClient = (payload) => axiosInstance.post('/clients', payload);
-export const updateClient = (id, payload) => axiosInstance.put(`/clients/${id}`, payload);
-export const deleteClient = (id) => axiosInstance.delete(`/clients/${id}`);
 
 // Task Categories
 export const getTaskCategories = (params) => axiosInstance.get('/task-categories', { params });
@@ -30,11 +27,3 @@ export const createTaskCategory = (payload) => axiosInstance.post('/task-categor
 export const updateTaskCategory = (id, payload) =>
   axiosInstance.put(`/task-categories/${id}`, payload);
 export const deleteTaskCategory = (id) => axiosInstance.delete(`/task-categories/${id}`);
-
-// Holidays
-export const getHolidays = (params) => axiosInstance.get('/holidays', { params });
-export const createHoliday = (payload) => axiosInstance.post('/holidays', payload);
-export const deleteHoliday = (id) => axiosInstance.delete(`/holidays/${id}`);
-
-// Calendar
-export const getCalendar = (params) => axiosInstance.get('/calendar', { params });

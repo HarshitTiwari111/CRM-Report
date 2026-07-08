@@ -33,10 +33,22 @@ export default function ActivityLogsPage() {
     keepPreviousData: true,
   });
 
+  const formatDetails = (r) => {
+    const value = r.details ?? r.description;
+    if (!value) return '—';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'object') {
+      return Object.entries(value)
+        .map(([key, val]) => `${key}: ${typeof val === 'object' && val !== null ? JSON.stringify(val) : val}`)
+        .join(', ');
+    }
+    return String(value);
+  };
+
   const columns = [
     { key: 'user', header: 'User', render: (r) => r.user?.name || r.userName || '—' },
     { key: 'action', header: 'Action', render: (r) => r.action },
-    { key: 'details', header: 'Details', render: (r) => r.details || r.description || '—' },
+    { key: 'details', header: 'Details', render: (r) => formatDetails(r) },
     { key: 'createdAt', header: 'When', render: (r) => (r.createdAt ? format(new Date(r.createdAt), 'MMM d, yyyy HH:mm') : '—') },
   ];
 
@@ -51,7 +63,7 @@ export default function ActivityLogsPage() {
         <Input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} />
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white card-shadow">
+      <div className="rounded-xl border border-slate-200 bg-white card-shadow dark:border-slate-700 dark:bg-slate-800">
         <DataTable
           columns={columns}
           data={data?.data || []}

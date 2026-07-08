@@ -51,7 +51,7 @@ export default function AdminAttendancePage() {
         <Input type="date" value={date} onChange={(e) => { setDate(e.target.value); setPage(1); }} />
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white card-shadow">
+      <div className="rounded-xl border border-slate-200 bg-white card-shadow dark:border-slate-700 dark:bg-slate-800">
         <DataTable
           columns={columns}
           data={data?.data || []}

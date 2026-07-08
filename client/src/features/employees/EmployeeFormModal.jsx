@@ -102,16 +102,27 @@ export default function EmployeeFormModal({ isOpen, onClose, employee }) {
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={isEdit ? 'Edit Employee' : 'Add Employee'} size="lg">
-      <form onSubmit={handleSubmit((v) => mutation.mutate(v))} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Input label="Full Name" error={errors.name?.message} {...register('name')} />
-        <Input label="Email" type="email" error={errors.email?.message} {...register('email')} />
+      <form
+        onSubmit={handleSubmit((v) => mutation.mutate(v))}
+        className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+        autoComplete="off"
+      >
+        <Input label="Full Name" autoComplete="off" error={errors.name?.message} {...register('name')} />
+        <Input
+          label="Email"
+          type="email"
+          autoComplete="off"
+          error={errors.email?.message}
+          {...register('email')}
+        />
         <Input
           label={isEdit ? 'New Password (optional)' : 'Password'}
           type="password"
+          autoComplete="new-password"
           error={errors.password?.message}
           {...register('password')}
         />
-        <Input label="Phone" error={errors.phone?.message} {...register('phone')} />
+        <Input label="Phone" autoComplete="off" error={errors.phone?.message} {...register('phone')} />
 
         <Controller
           control={control}

@@ -47,12 +47,12 @@ export default function EmployeeDashboardPage() {
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card title="Recent Tasks" actions={<Link to="/employee/tasks" className="text-xs font-medium text-primary-600 hover:text-primary-700">View all</Link>}>
           <ul className="flex flex-col gap-3">
-            {recentTasks.length === 0 && <p className="text-sm text-slate-400">No recent tasks</p>}
+            {recentTasks.length === 0 && <p className="text-sm text-slate-400 dark:text-slate-500">No recent tasks</p>}
             {recentTasks.map((task) => (
-              <li key={task._id} className="flex items-center justify-between gap-3 border-b border-slate-50 pb-3 last:border-0 last:pb-0">
+              <li key={task._id} className="flex items-center justify-between gap-3 border-b border-slate-50 dark:border-slate-700 pb-3 last:border-0 last:pb-0">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-slate-700">{task.title}</p>
-                  <p className="text-xs text-slate-400">{task.project?.name}</p>
+                  <p className="truncate text-sm font-medium text-slate-700 dark:text-slate-300">{task.title}</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">{task.project?.name}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <Badge color={priorityColor[task.priority] || 'slate'}>{task.priority}</Badge>
@@ -65,12 +65,12 @@ export default function EmployeeDashboardPage() {
 
         <Card title="Upcoming Deadlines">
           <ul className="flex flex-col gap-3">
-            {upcomingDeadlines.length === 0 && <p className="text-sm text-slate-400">No upcoming deadlines</p>}
+            {upcomingDeadlines.length === 0 && <p className="text-sm text-slate-400 dark:text-slate-500">No upcoming deadlines</p>}
             {upcomingDeadlines.map((task) => (
-              <li key={task._id} className="flex items-center justify-between gap-3 border-b border-slate-50 pb-3 last:border-0 last:pb-0">
+              <li key={task._id} className="flex items-center justify-between gap-3 border-b border-slate-50 dark:border-slate-700 pb-3 last:border-0 last:pb-0">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-slate-700">{task.title}</p>
-                  <p className="text-xs text-slate-400">
+                  <p className="truncate text-sm font-medium text-slate-700 dark:text-slate-300">{task.title}</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">
                     Due {task.expectedCompletion ? format(new Date(task.expectedCompletion), 'MMM d, yyyy') : 'N/A'}
                   </p>
                 </div>

@@ -61,10 +61,12 @@ const taskSchema = new mongoose.Schema(
       default: 'other',
     },
     startTime: {
-      type: Date,
+      type: String,
+      trim: true,
     },
     endTime: {
-      type: Date,
+      type: String,
+      trim: true,
     },
     totalHours: {
       type: Number,
@@ -123,13 +125,6 @@ const taskSchema = new mongoose.Schema(
 );
 
 taskSchema.pre('validate', function preValidate(next) {
-  if (this.startTime && this.endTime && !this.totalHours) {
-    const diffMs = new Date(this.endTime) - new Date(this.startTime);
-    if (diffMs > 0) {
-      this.totalHours = Math.round((diffMs / (1000 * 60 * 60)) * 100) / 100;
-    }
-  }
-
   if (this.status === 'completed' && !this.actualCompletion) {
     this.actualCompletion = new Date();
   }

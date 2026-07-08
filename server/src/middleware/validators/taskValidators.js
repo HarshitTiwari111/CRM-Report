@@ -15,6 +15,7 @@ const TASK_TYPES = [
   'other',
 ];
 const STATUSES = ['pending', 'in-progress', 'completed', 'hold', 'cancelled'];
+const TIME_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 const createTaskValidator = [
   body('title').trim().notEmpty().withMessage('Title is required'),
@@ -26,8 +27,8 @@ const createTaskValidator = [
   body('taskType').optional().isIn(TASK_TYPES).withMessage('Invalid task type'),
   body('status').optional().isIn(STATUSES).withMessage('Invalid status'),
   body('taskDate').optional().isISO8601().withMessage('Invalid task date'),
-  body('startTime').optional({ nullable: true, checkFalsy: true }).isISO8601(),
-  body('endTime').optional({ nullable: true, checkFalsy: true }).isISO8601(),
+  body('startTime').optional({ nullable: true, checkFalsy: true }).matches(TIME_REGEX).withMessage('Invalid start time'),
+  body('endTime').optional({ nullable: true, checkFalsy: true }).matches(TIME_REGEX).withMessage('Invalid end time'),
   body('expectedCompletion').optional({ nullable: true, checkFalsy: true }).isISO8601(),
 ];
 
@@ -36,6 +37,8 @@ const updateTaskValidator = [
   body('priority').optional().isIn(PRIORITIES).withMessage('Invalid priority'),
   body('taskType').optional().isIn(TASK_TYPES).withMessage('Invalid task type'),
   body('status').optional().isIn(STATUSES).withMessage('Invalid status'),
+  body('startTime').optional({ nullable: true, checkFalsy: true }).matches(TIME_REGEX).withMessage('Invalid start time'),
+  body('endTime').optional({ nullable: true, checkFalsy: true }).matches(TIME_REGEX).withMessage('Invalid end time'),
 ];
 
 const statusPatchValidator = [

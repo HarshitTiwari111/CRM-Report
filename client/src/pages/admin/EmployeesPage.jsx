@@ -82,8 +82,8 @@ export default function EmployeesPage() {
       sortable: true,
       render: (r) => (
         <div>
-          <p className="font-medium text-slate-800">{r.name}</p>
-          <p className="text-xs text-slate-400">{r.email}</p>
+          <p className="font-medium text-slate-800 dark:text-slate-100">{r.name}</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500">{r.email}</p>
         </div>
       ),
     },
@@ -103,42 +103,42 @@ export default function EmployeesPage() {
           <button
             title="Edit"
             onClick={() => setFormModal({ open: true, employee: r })}
-            className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100"
+            className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700"
           >
             <FiEdit2 className="h-4 w-4" />
           </button>
           <button
             title="Assign department/team/manager"
             onClick={() => setAssignModal({ open: true, employee: r })}
-            className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100"
+            className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700"
           >
             <FiUserCheck className="h-4 w-4" />
           </button>
           <button
             title="Reset password"
             onClick={() => setResetModal({ open: true, employee: r })}
-            className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100"
+            className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700"
           >
             <FiKey className="h-4 w-4" />
           </button>
           <button
             title={r.isActive ? 'Deactivate' : 'Activate'}
             onClick={() => statusMutation.mutate({ id: r._id, isActive: !r.isActive })}
-            className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100"
+            className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700"
           >
-            {r.isActive ? <FiToggleRight className="h-4 w-4 text-emerald-500" /> : <FiToggleLeft className="h-4 w-4" />}
+            {r.isActive ? <FiToggleRight className="h-4 w-4 text-emerald-500 dark:text-emerald-400" /> : <FiToggleLeft className="h-4 w-4" />}
           </button>
           <Link
             to={`/admin/employees/${r._id}/performance`}
             title="View performance"
-            className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100"
+            className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700"
           >
             <FiBarChart2 className="h-4 w-4" />
           </Link>
           <button
             title="Delete"
             onClick={() => setDeleteTarget(r)}
-            className="rounded-md p-1.5 text-red-500 hover:bg-red-50"
+            className="rounded-md p-1.5 text-red-500 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/40"
           >
             <FiTrash2 className="h-4 w-4" />
           </button>
@@ -194,7 +194,7 @@ export default function EmployeesPage() {
         />
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white card-shadow">
+      <div className="rounded-xl border border-slate-200 bg-white card-shadow dark:border-slate-700 dark:bg-slate-800">
         <DataTable
           columns={columns}
           data={data?.data || []}

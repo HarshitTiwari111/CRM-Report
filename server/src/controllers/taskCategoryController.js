@@ -2,10 +2,17 @@ const TaskCategory = require('../models/TaskCategory');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { logActivity } = require('../utils/activityLogger');
+const { getPagination, buildMeta } = require('../utils/pagination');
 
 const listTaskCategories = asyncHandler(async (req, res) => {
-  const categories = await TaskCategory.find().sort({ name: 1 });
-  res.json({ success: true, data: categories });
+  const { pageNum, limitNum, skip } = getPagination(req.query);
+
+  const [categories, total] = await Promise.all([
+    TaskCategory.find().sort({ name: 1 }).skip(skip).limit(limitNum),
+    TaskCategory.countDocuments(),
+  ]);
+
+  res.json({ success: true, data: categories, meta: buildMeta(pageNum, limitNum, total) });
 });
 
 const createTaskCategory = asyncHandler(async (req, res) => {

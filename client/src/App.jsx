@@ -1,4 +1,5 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
+import { useSelector } from 'react-redux';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Spinner from './components/ui/Spinner';
 import AppLayout from './components/layout/AppLayout';
@@ -16,10 +17,7 @@ const EmployeePerformancePage = lazy(() => import('./pages/admin/EmployeePerform
 const DepartmentsPage = lazy(() => import('./pages/admin/DepartmentsPage'));
 const TeamsPage = lazy(() => import('./pages/admin/TeamsPage'));
 const ProjectsPage = lazy(() => import('./pages/admin/ProjectsPage'));
-const ClientsPage = lazy(() => import('./pages/admin/ClientsPage'));
 const TaskCategoriesPage = lazy(() => import('./pages/admin/TaskCategoriesPage'));
-const HolidaysPage = lazy(() => import('./pages/admin/HolidaysPage'));
-const SettingsPage = lazy(() => import('./pages/admin/SettingsPage'));
 const ActivityLogsPage = lazy(() => import('./pages/admin/ActivityLogsPage'));
 const AdminAttendancePage = lazy(() => import('./pages/admin/AttendancePage'));
 
@@ -29,7 +27,6 @@ const EmployeeAttendancePage = lazy(() => import('./pages/employee/AttendancePag
 const TasksPage = lazy(() => import('./pages/shared/TasksPage'));
 const ReportsPage = lazy(() => import('./pages/shared/ReportsPage'));
 const ProfilePage = lazy(() => import('./pages/shared/ProfilePage'));
-const CalendarPage = lazy(() => import('./pages/shared/CalendarPage'));
 
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 
@@ -48,6 +45,13 @@ function RoleHomeRedirect() {
 }
 
 export default function App() {
+  const theme = useSelector((state) => state.ui.theme);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
   return (
     <Suspense fallback={<SuspenseFallback />}>
       <Routes>
@@ -62,7 +66,6 @@ export default function App() {
         <Route element={<ProtectedRoute />}>
           <Route element={<AppLayout />}>
             <Route path="/profile" element={<ProfilePage />} />
-            <Route path="/calendar" element={<CalendarPage />} />
 
             {/* Superadmin only */}
             <Route element={<ProtectedRoute allowedRoles={['superadmin']} />}>
@@ -74,10 +77,7 @@ export default function App() {
               <Route path="/admin/departments" element={<DepartmentsPage />} />
               <Route path="/admin/teams" element={<TeamsPage />} />
               <Route path="/admin/projects" element={<ProjectsPage />} />
-              <Route path="/admin/clients" element={<ClientsPage />} />
               <Route path="/admin/task-categories" element={<TaskCategoriesPage />} />
-              <Route path="/admin/holidays" element={<HolidaysPage />} />
-              <Route path="/admin/settings" element={<SettingsPage />} />
               <Route path="/admin/activity-logs" element={<ActivityLogsPage />} />
               <Route path="/admin/attendance" element={<AdminAttendancePage />} />
             </Route>

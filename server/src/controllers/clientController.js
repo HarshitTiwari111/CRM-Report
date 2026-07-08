@@ -2,10 +2,17 @@ const Client = require('../models/Client');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { logActivity } = require('../utils/activityLogger');
+const { getPagination, buildMeta } = require('../utils/pagination');
 
 const listClients = asyncHandler(async (req, res) => {
-  const clients = await Client.find().sort({ name: 1 });
-  res.json({ success: true, data: clients });
+  const { pageNum, limitNum, skip } = getPagination(req.query);
+
+  const [clients, total] = await Promise.all([
+    Client.find().sort({ name: 1 }).skip(skip).limit(limitNum),
+    Client.countDocuments(),
+  ]);
+
+  res.json({ success: true, data: clients, meta: buildMeta(pageNum, limitNum, total) });
 });
 
 const createClient = asyncHandler(async (req, res) => {

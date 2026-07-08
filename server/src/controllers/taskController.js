@@ -18,6 +18,16 @@ const buildAttachments = (files = []) =>
     name: file.originalname,
   }));
 
+const computeTotalHours = (startTime, endTime) => {
+  if (!startTime || !endTime) return 0;
+  const [sh, sm] = startTime.split(':').map(Number);
+  const [eh, em] = endTime.split(':').map(Number);
+  if ([sh, sm, eh, em].some((n) => Number.isNaN(n))) return 0;
+  let minutes = eh * 60 + em - (sh * 60 + sm);
+  if (minutes < 0) minutes += 24 * 60;
+  return Math.round((minutes / 60) * 100) / 100;
+};
+
 // GET /tasks
 const listTasks = asyncHandler(async (req, res) => {
   const {
@@ -118,6 +128,10 @@ const createTask = asyncHandler(async (req, res) => {
 
   const assignedTo = req.user.role === 'employee' ? req.user._id : body.assignedTo || req.user._id;
 
+  if (!body.totalHours) {
+    body.totalHours = computeTotalHours(body.startTime, body.endTime);
+  }
+
   const task = await Task.create({
     ...body,
     assignedTo,
@@ -185,10 +199,8 @@ const updateTask = asyncHandler(async (req, res) => {
     }
   });
 
-  if (req.body.startTime !== undefined || req.body.endTime !== undefined) {
-    if (!req.body.totalHours) {
-      task.totalHours = 0;
-    }
+  if ((req.body.startTime !== undefined || req.body.endTime !== undefined) && !req.body.totalHours) {
+    task.totalHours = computeTotalHours(task.startTime, task.endTime);
   }
 
   if (req.files && req.files.length) {

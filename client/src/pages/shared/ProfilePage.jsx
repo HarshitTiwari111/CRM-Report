@@ -5,6 +5,16 @@ import { useMutation } from '@tanstack/react-query';
 import { useDispatch } from 'react-redux';
 import { toast } from 'react-toastify';
 import { format } from 'date-fns';
+import {
+  FiMail,
+  FiPhone,
+  FiBriefcase,
+  FiCalendar,
+  FiHash,
+  FiUser,
+  FiLock,
+  FiShield,
+} from 'react-icons/fi';
 import { PageHeader, Card, Input, Button, FileInput, Badge } from '../../components/ui';
 import { profileSchema } from '../../schemas/profileSchemas';
 import { changePasswordSchema } from '../../schemas/authSchemas';
@@ -12,6 +22,20 @@ import { updateMyProfile } from '../../api/users';
 import { changePassword } from '../../api/auth';
 import { useAuth } from '../../hooks/useAuth';
 import { updateUser as updateUserAction } from '../../features/auth/authSlice';
+
+function InfoRow({ icon: Icon, label, value }) {
+  return (
+    <div className="flex items-center gap-3 py-2.5">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400">
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-xs text-slate-400 dark:text-slate-500">{label}</p>
+        <p className="truncate text-sm font-medium text-slate-700 dark:text-slate-300">{value || '—'}</p>
+      </div>
+    </div>
+  );
+}
 
 export default function ProfilePage() {
   const { user } = useAuth();
@@ -63,82 +87,116 @@ export default function ProfilePage() {
     <div>
       <PageHeader title="Profile & Settings" subtitle="Manage your personal information and security" />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <Card title="Account Overview" className="lg:col-span-1">
-          <div className="flex flex-col items-center gap-3 text-center">
-            {user?.profilePhoto ? (
-              <img src={user.profilePhoto} alt={user.name} className="h-20 w-20 rounded-full object-cover" />
-            ) : (
-              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary-100 text-xl font-semibold text-primary-700">
-                {user?.name?.charAt(0)}
-              </div>
-            )}
-            <div>
-              <p className="text-base font-semibold text-slate-800">{user?.name}</p>
-              <p className="text-sm text-slate-500">{user?.email}</p>
+      {/* Cover / identity banner */}
+      <div className="mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white card-shadow dark:border-slate-700 dark:bg-slate-800">
+        <div className="h-20 bg-gradient-to-r from-navy-950 via-navy-900 to-primary-700 sm:h-24" />
+        <div className="flex flex-col gap-4 px-5 pb-5 sm:flex-row sm:items-end sm:gap-5 sm:px-6">
+          {user?.profilePhoto ? (
+            <img
+              src={user.profilePhoto}
+              alt={user.name}
+              className="-mt-10 h-20 w-20 shrink-0 rounded-full border-4 border-white object-cover shadow-md sm:h-24 sm:w-24 dark:border-slate-800"
+            />
+          ) : (
+            <div className="-mt-10 flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-4 border-white bg-primary-600 text-2xl font-semibold text-white shadow-md sm:h-24 sm:w-24 dark:border-slate-800">
+              {user?.name?.charAt(0)}
             </div>
-            <Badge color="indigo">{user?.role}</Badge>
-            <div className="mt-2 w-full space-y-1 text-left text-sm text-slate-500">
-              <p><span className="font-medium text-slate-600">Employee ID:</span> {user?.employeeId || '—'}</p>
-              <p><span className="font-medium text-slate-600">Department:</span> {user?.department?.name || '—'}</p>
-              <p><span className="font-medium text-slate-600">Designation:</span> {user?.designation || '—'}</p>
-              <p>
-                <span className="font-medium text-slate-600">Joined:</span>{' '}
-                {user?.joiningDate ? format(new Date(user.joiningDate), 'MMM d, yyyy') : '—'}
-              </p>
+          )}
+          <div className="flex flex-1 flex-col gap-1 pt-1 sm:flex-row sm:items-center sm:justify-between sm:pt-0">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">{user?.name}</h2>
+                <Badge color={user?.role === 'superadmin' ? 'purple' : 'indigo'} className="flex items-center gap-1">
+                  <FiShield className="h-3 w-3" />
+                  {user?.role === 'superadmin' ? 'Super Admin' : 'Employee'}
+                </Badge>
+              </div>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{user?.email}</p>
             </div>
           </div>
+        </div>
+        <div className="grid grid-cols-1 divide-y divide-slate-100 border-t border-slate-100 px-5 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4 sm:px-6 dark:divide-slate-700 dark:border-slate-700">
+          <InfoRow icon={FiHash} label="Employee ID" value={user?.employeeId} />
+          <InfoRow icon={FiBriefcase} label="Department" value={user?.department?.name} />
+          <InfoRow icon={FiUser} label="Designation" value={user?.designation} />
+          <InfoRow
+            icon={FiCalendar}
+            label="Joined"
+            value={user?.joiningDate ? format(new Date(user.joiningDate), 'MMM d, yyyy') : null}
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Card
+          title="Personal Information"
+          actions={<FiUser className="h-4 w-4 text-slate-400 dark:text-slate-500" />}
+        >
+          <p className="-mt-2 mb-4 text-xs text-slate-400 dark:text-slate-500">Update your name, phone number and profile photo.</p>
+          <form onSubmit={handleProfileSubmit(onProfileSubmit)} className="flex flex-col gap-4">
+            <Input
+              label="Full Name"
+              icon={FiUser}
+              error={profileErrors.name?.message}
+              {...registerProfile('name')}
+            />
+            <Input
+              label="Phone"
+              icon={FiPhone}
+              error={profileErrors.phone?.message}
+              {...registerProfile('phone')}
+            />
+            <Input label="Email" icon={FiMail} value={user?.email || ''} disabled />
+            <FileInput
+              label="Profile Photo"
+              accept="image/*"
+              fileName={photo?.name}
+              onChange={(e) => setPhoto(e.target.files?.[0] || null)}
+            />
+            <div className="flex justify-end border-t border-slate-100 pt-4 dark:border-slate-700">
+              <Button type="submit" isLoading={profileMutation.isPending}>
+                Save Changes
+              </Button>
+            </div>
+          </form>
         </Card>
 
-        <div className="flex flex-col gap-6 lg:col-span-2">
-          <Card title="Update Profile">
-            <form onSubmit={handleProfileSubmit(onProfileSubmit)} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Input label="Full Name" error={profileErrors.name?.message} {...registerProfile('name')} />
-              <Input label="Phone" error={profileErrors.phone?.message} {...registerProfile('phone')} />
-              <FileInput
-                label="Profile Photo"
-                accept="image/*"
-                fileName={photo?.name}
-                onChange={(e) => setPhoto(e.target.files?.[0] || null)}
-                className="sm:col-span-2"
-              />
-              <div className="sm:col-span-2 flex justify-end">
-                <Button type="submit" isLoading={profileMutation.isPending}>
-                  Save Changes
-                </Button>
-              </div>
-            </form>
-          </Card>
-
-          <Card title="Change Password">
-            <form onSubmit={handlePasswordSubmit((v) => passwordMutation.mutate(v))} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Input
-                label="Current Password"
-                type="password"
-                containerClassName="sm:col-span-2"
-                error={passwordErrors.oldPassword?.message}
-                {...registerPassword('oldPassword')}
-              />
-              <Input
-                label="New Password"
-                type="password"
-                error={passwordErrors.newPassword?.message}
-                {...registerPassword('newPassword')}
-              />
-              <Input
-                label="Confirm New Password"
-                type="password"
-                error={passwordErrors.confirmPassword?.message}
-                {...registerPassword('confirmPassword')}
-              />
-              <div className="sm:col-span-2 flex justify-end">
-                <Button type="submit" isLoading={passwordMutation.isPending}>
-                  Change Password
-                </Button>
-              </div>
-            </form>
-          </Card>
-        </div>
+        <Card
+          title="Security"
+          actions={<FiLock className="h-4 w-4 text-slate-400 dark:text-slate-500" />}
+        >
+          <p className="-mt-2 mb-4 text-xs text-slate-400 dark:text-slate-500">
+            Choose a strong password you don&apos;t use elsewhere.
+          </p>
+          <form onSubmit={handlePasswordSubmit((v) => passwordMutation.mutate(v))} className="flex flex-col gap-4">
+            <Input
+              label="Current Password"
+              type="password"
+              autoComplete="current-password"
+              error={passwordErrors.oldPassword?.message}
+              {...registerPassword('oldPassword')}
+            />
+            <Input
+              label="New Password"
+              type="password"
+              autoComplete="new-password"
+              error={passwordErrors.newPassword?.message}
+              {...registerPassword('newPassword')}
+            />
+            <Input
+              label="Confirm New Password"
+              type="password"
+              autoComplete="new-password"
+              error={passwordErrors.confirmPassword?.message}
+              {...registerPassword('confirmPassword')}
+            />
+            <div className="flex justify-end border-t border-slate-100 pt-4 dark:border-slate-700">
+              <Button type="submit" isLoading={passwordMutation.isPending}>
+                Change Password
+              </Button>
+            </div>
+          </form>
+        </Card>
       </div>
     </div>
   );

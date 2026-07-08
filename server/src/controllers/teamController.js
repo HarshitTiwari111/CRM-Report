@@ -2,10 +2,22 @@ const Team = require('../models/Team');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { logActivity } = require('../utils/activityLogger');
+const { getPagination, buildMeta } = require('../utils/pagination');
 
 const listTeams = asyncHandler(async (req, res) => {
-  const teams = await Team.find().populate('department', 'name').populate('teamLead', 'name email').sort({ name: 1 });
-  res.json({ success: true, data: teams });
+  const { pageNum, limitNum, skip } = getPagination(req.query);
+
+  const [teams, total] = await Promise.all([
+    Team.find()
+      .populate('department', 'name')
+      .populate('teamLead', 'name email')
+      .sort({ name: 1 })
+      .skip(skip)
+      .limit(limitNum),
+    Team.countDocuments(),
+  ]);
+
+  res.json({ success: true, data: teams, meta: buildMeta(pageNum, limitNum, total) });
 });
 
 const createTeam = asyncHandler(async (req, res) => {

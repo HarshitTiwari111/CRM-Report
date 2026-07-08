@@ -59,12 +59,12 @@ export default function AttendancePage() {
             type="month"
             value={month}
             onChange={(e) => setMonth(e.target.value)}
-            className="ml-auto rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-4 focus:ring-primary-100"
+            className="ml-auto rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-4 focus:ring-primary-100 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:[color-scheme:dark]"
           />
         </div>
       </Card>
 
-      <div className="rounded-xl border border-slate-200 bg-white card-shadow">
+      <div className="rounded-xl border border-slate-200 bg-white card-shadow dark:border-slate-700 dark:bg-slate-800">
         <DataTable
           columns={columns}
           data={records}

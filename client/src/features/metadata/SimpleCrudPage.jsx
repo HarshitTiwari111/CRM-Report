@@ -32,12 +32,15 @@ export default function SimpleCrudPage({
 }) {
   const [modal, setModal] = useState({ open: false, item: null });
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [page, setPage] = useState(1);
+  const [limit] = useState(20);
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
-    queryKey: [queryKey, 'list'],
-    queryFn: () => listFn({ limit: 200 }),
-    select: (res) => res.data.data,
+    queryKey: [queryKey, 'list', page, limit],
+    queryFn: () => listFn({ page, limit }),
+    select: (res) => res.data,
+    keepPreviousData: true,
   });
 
   const {
@@ -78,7 +81,7 @@ export default function SimpleCrudPage({
   });
 
   const columns = [
-    { key: 'name', header: 'Name', render: (r) => <span className="font-medium text-slate-800">{r.name}</span> },
+    { key: 'name', header: 'Name', render: (r) => <span className="font-medium text-slate-800 dark:text-slate-100">{r.name}</span> },
     ...extraColumns,
     { key: 'description', header: 'Description', render: (r) => r.description || '—' },
     {
@@ -86,10 +89,10 @@ export default function SimpleCrudPage({
       header: 'Actions',
       render: (r) => (
         <div className="flex items-center gap-1">
-          <button onClick={() => openEdit(r)} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100">
+          <button onClick={() => openEdit(r)} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700">
             <FiEdit2 className="h-4 w-4" />
           </button>
-          <button onClick={() => setDeleteTarget(r)} className="rounded-md p-1.5 text-red-500 hover:bg-red-50">
+          <button onClick={() => setDeleteTarget(r)} className="rounded-md p-1.5 text-red-500 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/40">
             <FiTrash2 className="h-4 w-4" />
           </button>
         </div>
@@ -109,14 +112,15 @@ export default function SimpleCrudPage({
         }
       />
 
-      <div className="rounded-xl border border-slate-200 bg-white card-shadow">
+      <div className="rounded-xl border border-slate-200 bg-white card-shadow dark:border-slate-700 dark:bg-slate-800">
         <DataTable
           columns={columns}
-          data={data || []}
+          data={data?.data || []}
           isLoading={isLoading}
-          page={1}
-          limit={data?.length || 1}
-          total={data?.length || 0}
+          page={page}
+          limit={limit}
+          total={data?.meta?.total || 0}
+          onPageChange={setPage}
           rowKey={(r) => r._id}
           emptyMessage={`No ${title.toLowerCase()} found`}
         />

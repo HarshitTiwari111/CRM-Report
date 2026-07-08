@@ -40,7 +40,7 @@ export default function ForgotPasswordPage() {
         <Button type="submit" className="mt-2 w-full" isLoading={mutation.isPending}>
           Send reset link
         </Button>
-        <Link to="/login" className="text-center text-sm font-medium text-primary-600 hover:text-primary-700">
+        <Link to="/login" className="text-center text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300">
           Back to sign in
         </Link>
       </form>

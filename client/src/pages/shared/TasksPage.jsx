@@ -209,7 +209,7 @@ export default function TasksPage() {
   };
 
   const columns = [
-    { key: 'title', header: 'Title', sortable: true, render: (r) => <span className="font-medium text-slate-800">{r.title}</span> },
+    { key: 'title', header: 'Title', sortable: true, render: (r) => <span className="font-medium text-slate-800 dark:text-slate-100">{r.title}</span> },
     { key: 'project', header: 'Project', render: (r) => r.project?.name || '—' },
     ...(isSuperAdmin ? [{ key: 'assignedTo', header: 'Employee', render: (r) => r.assignedTo?.name || '—' }] : []),
     { key: 'department', header: 'Department', render: (r) => r.department?.name || '—' },
@@ -221,25 +221,25 @@ export default function TasksPage() {
       header: 'Actions',
       render: (r) => (
         <div className="flex items-center gap-1">
-          <button title="Edit" onClick={() => setFormModal({ open: true, task: r, prefill: null })} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100">
+          <button title="Edit" onClick={() => setFormModal({ open: true, task: r, prefill: null })} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700">
             <FiEdit2 className="h-4 w-4" />
           </button>
           {r.status !== 'completed' && (
             <button
               title="Mark complete"
               onClick={() => statusMutation.mutate({ id: r._id, status: 'completed' })}
-              className="rounded-md p-1.5 text-emerald-500 hover:bg-emerald-50"
+              className="rounded-md p-1.5 text-emerald-500 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/40"
             >
               <FiCheckCircle className="h-4 w-4" />
             </button>
           )}
-          <button title="Duplicate" onClick={() => duplicateMutation.mutate(r._id)} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100">
+          <button title="Duplicate" onClick={() => duplicateMutation.mutate(r._id)} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700">
             <FiCopy className="h-4 w-4" />
           </button>
-          <button title="Archive" onClick={() => archiveMutation.mutate(r._id)} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100">
+          <button title="Archive" onClick={() => archiveMutation.mutate(r._id)} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700">
             <FiArchive className="h-4 w-4" />
           </button>
-          <button title="Delete" onClick={() => setDeleteTarget(r)} className="rounded-md p-1.5 text-red-500 hover:bg-red-50">
+          <button title="Delete" onClick={() => setDeleteTarget(r)} className="rounded-md p-1.5 text-red-500 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/40">
             <FiTrash2 className="h-4 w-4" />
           </button>
         </div>
@@ -264,22 +264,70 @@ export default function TasksPage() {
         }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <Input placeholder="Search tasks..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
-        <Select placeholder="All statuses" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} options={TASK_STATUS_OPTIONS} />
-        <Select placeholder="All priorities" value={priority} onChange={(e) => { setPriority(e.target.value); setPage(1); }} options={TASK_PRIORITY_OPTIONS} />
-        <Select placeholder="All projects" value={project} onChange={(e) => { setProject(e.target.value); setPage(1); }} options={(projects || []).map((p) => ({ value: p._id, label: p.name }))} />
-        <Select placeholder="All departments" value={department} onChange={(e) => { setDepartment(e.target.value); setPage(1); }} options={(departments || []).map((d) => ({ value: d._id, label: d.name }))} />
+      <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 card-shadow dark:border-slate-700 dark:bg-slate-800">
+        <Input
+          placeholder="Search tasks..."
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          containerClassName="w-full sm:w-52"
+        />
+        <Select
+          placeholder="All statuses"
+          value={status}
+          onChange={(e) => { setStatus(e.target.value); setPage(1); }}
+          options={TASK_STATUS_OPTIONS}
+          containerClassName="w-40"
+        />
+        <Select
+          placeholder="All priorities"
+          value={priority}
+          onChange={(e) => { setPriority(e.target.value); setPage(1); }}
+          options={TASK_PRIORITY_OPTIONS}
+          containerClassName="w-40"
+        />
+        <Select
+          placeholder="All projects"
+          value={project}
+          onChange={(e) => { setProject(e.target.value); setPage(1); }}
+          options={(projects || []).map((p) => ({ value: p._id, label: p.name }))}
+          containerClassName="w-40"
+        />
+        <Select
+          placeholder="All departments"
+          value={department}
+          onChange={(e) => { setDepartment(e.target.value); setPage(1); }}
+          options={(departments || []).map((d) => ({ value: d._id, label: d.name }))}
+          containerClassName="w-40"
+        />
         {isSuperAdmin && (
-          <Select placeholder="All employees" value={employee} onChange={(e) => { setEmployee(e.target.value); setPage(1); }} options={(employees || []).map((e) => ({ value: e._id, label: e.name }))} />
+          <Select
+            placeholder="All employees"
+            value={employee}
+            onChange={(e) => { setEmployee(e.target.value); setPage(1); }}
+            options={(employees || []).map((e) => ({ value: e._id, label: e.name }))}
+            containerClassName="w-40"
+          />
         )}
-        <Input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} />
-        <Input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} />
+        <div className="flex items-center gap-1.5 border-l border-slate-200 pl-3 dark:border-slate-700">
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
+            containerClassName="w-40"
+          />
+          <span className="shrink-0 text-xs text-slate-400 dark:text-slate-500">to</span>
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
+            containerClassName="w-40"
+          />
+        </div>
       </div>
 
       {selectedIds.size > 0 && (
-        <div className="mb-4 flex items-center gap-3 rounded-lg border border-primary-200 bg-primary-50 px-4 py-2.5">
-          <span className="text-sm font-medium text-primary-700">{selectedIds.size} selected</span>
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-primary-200 bg-primary-50 px-4 py-2.5 dark:border-primary-800 dark:bg-primary-900/30">
+          <span className="text-sm font-medium text-primary-700 dark:text-primary-300">{selectedIds.size} selected</span>
           <Button size="sm" variant="secondary" onClick={() => bulkUpdateMutation.mutate({ ids: [...selectedIds], update: { status: 'completed' } })}>
             Mark Complete
           </Button>
@@ -292,7 +340,7 @@ export default function TasksPage() {
         </div>
       )}
 
-      <div className="rounded-xl border border-slate-200 bg-white card-shadow">
+      <div className="rounded-xl border border-slate-200 bg-white card-shadow dark:border-slate-700 dark:bg-slate-800">
         <DataTable
           columns={columns}
           data={data?.data || []}

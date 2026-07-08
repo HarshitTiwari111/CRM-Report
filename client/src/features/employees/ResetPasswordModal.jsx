@@ -26,10 +26,11 @@ export default function ResetPasswordModal({ isOpen, onClose, employee }) {
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={`Reset Password — ${employee?.name || ''}`} size="sm">
-      <form onSubmit={handleSubmit((v) => mutation.mutate(v))} className="flex flex-col gap-4">
+      <form onSubmit={handleSubmit((v) => mutation.mutate(v))} className="flex flex-col gap-4" autoComplete="off">
         <Input
           label="New Password"
           type="password"
+          autoComplete="new-password"
           error={errors.newPassword?.message}
           {...register('newPassword')}
         />

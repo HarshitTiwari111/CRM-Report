@@ -9,16 +9,25 @@ import './index.css';
 import App from './App.jsx';
 import { store } from './app/store';
 import { queryClient } from './app/queryClient';
+import ErrorBoundary from './components/ErrorBoundary';
+
+const storedTheme = localStorage.getItem('theme');
+const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
+if (storedTheme === 'dark' || (!storedTheme && prefersDark)) {
+  document.documentElement.classList.add('dark');
+}
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <Provider store={store}>
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <App />
-          <ToastContainer position="top-right" autoClose={3000} newestOnTop />
-        </BrowserRouter>
-      </QueryClientProvider>
-    </Provider>
+    <ErrorBoundary>
+      <Provider store={store}>
+        <QueryClientProvider client={queryClient}>
+          <BrowserRouter>
+            <App />
+            <ToastContainer position="top-right" autoClose={3000} newestOnTop />
+          </BrowserRouter>
+        </QueryClientProvider>
+      </Provider>
+    </ErrorBoundary>
   </StrictMode>
 );

@@ -6,7 +6,7 @@ const cors = require('cors');
 const routes = require('./routes');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 const { sanitizeRequest } = require('./utils/sanitize');
-const { authLimiter, generalLimiter } = require('./middleware/rateLimiter');
+const { generalLimiter } = require('./middleware/rateLimiter');
 
 const app = express();
 
@@ -33,7 +33,6 @@ app.get('/api/health', (req, res) => {
   res.json({ success: true, data: { status: 'ok', timestamp: new Date().toISOString() } });
 });
 
-app.use('/api/auth', authLimiter);
 app.use('/api', generalLimiter, routes);
 
 app.use(notFound);

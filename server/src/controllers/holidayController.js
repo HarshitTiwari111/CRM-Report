@@ -3,11 +3,18 @@ const Task = require('../models/Task');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { logActivity } = require('../utils/activityLogger');
+const { getPagination, buildMeta } = require('../utils/pagination');
 
 // GET /holidays
 const listHolidays = asyncHandler(async (req, res) => {
-  const holidays = await Holiday.find().sort({ date: 1 });
-  res.json({ success: true, data: holidays });
+  const { pageNum, limitNum, skip } = getPagination(req.query);
+
+  const [holidays, total] = await Promise.all([
+    Holiday.find().sort({ date: 1 }).skip(skip).limit(limitNum),
+    Holiday.countDocuments(),
+  ]);
+
+  res.json({ success: true, data: holidays, meta: buildMeta(pageNum, limitNum, total) });
 });
 
 // POST /holidays

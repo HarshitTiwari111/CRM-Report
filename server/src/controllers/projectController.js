@@ -2,10 +2,22 @@ const Project = require('../models/Project');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { logActivity } = require('../utils/activityLogger');
+const { getPagination, buildMeta } = require('../utils/pagination');
 
 const listProjects = asyncHandler(async (req, res) => {
-  const projects = await Project.find().populate('client', 'name').populate('department', 'name').sort({ name: 1 });
-  res.json({ success: true, data: projects });
+  const { pageNum, limitNum, skip } = getPagination(req.query);
+
+  const [projects, total] = await Promise.all([
+    Project.find()
+      .populate('client', 'name')
+      .populate('department', 'name')
+      .sort({ name: 1 })
+      .skip(skip)
+      .limit(limitNum),
+    Project.countDocuments(),
+  ]);
+
+  res.json({ success: true, data: projects, meta: buildMeta(pageNum, limitNum, total) });
 });
 
 const createProject = asyncHandler(async (req, res) => {

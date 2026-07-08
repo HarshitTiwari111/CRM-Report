@@ -2,10 +2,17 @@ const Department = require('../models/Department');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { logActivity } = require('../utils/activityLogger');
+const { getPagination, buildMeta } = require('../utils/pagination');
 
 const listDepartments = asyncHandler(async (req, res) => {
-  const departments = await Department.find().sort({ name: 1 });
-  res.json({ success: true, data: departments });
+  const { pageNum, limitNum, skip } = getPagination(req.query);
+
+  const [departments, total] = await Promise.all([
+    Department.find().sort({ name: 1 }).skip(skip).limit(limitNum),
+    Department.countDocuments(),
+  ]);
+
+  res.json({ success: true, data: departments, meta: buildMeta(pageNum, limitNum, total) });
 });
 
 const createDepartment = asyncHandler(async (req, res) => {

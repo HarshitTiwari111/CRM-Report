@@ -64,7 +64,7 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={() => setShowPassword((s) => !s)}
-            className="absolute right-3 top-[34px] text-slate-400 hover:text-slate-600"
+            className="absolute right-3 top-[34px] text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
             tabIndex={-1}
           >
             {showPassword ? <FiEyeOff className="h-4 w-4" /> : <FiEye className="h-4 w-4" />}
@@ -73,7 +73,7 @@ export default function LoginPage() {
 
         <div className="flex items-center justify-between">
           <Checkbox label="Remember me" {...register('rememberMe')} />
-          <Link to="/forgot-password" className="text-sm font-medium text-primary-600 hover:text-primary-700">
+          <Link to="/forgot-password" className="text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300">
             Forgot password?
           </Link>
         </div>
