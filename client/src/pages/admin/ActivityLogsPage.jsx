@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
+import { FiX } from 'react-icons/fi';
 import { PageHeader, Input, DataTable } from '../../components/ui';
 import { useDebounce } from '../../hooks/useDebounce';
 import { getActivityLogs } from '../../api/activityLogs';
@@ -61,6 +62,16 @@ export default function ActivityLogsPage() {
         <Input placeholder="Filter by action..." value={action} onChange={(e) => { setAction(e.target.value); setPage(1); }} />
         <Input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} />
         <Input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} />
+        {(user || action || dateFrom || dateTo) && (
+          <button
+            onClick={() => { setUser(''); setAction(''); setDateFrom(''); setDateTo(''); setPage(1); }}
+            className="col-span-2 flex items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-100 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50 sm:col-span-1"
+            title="Reset all filters"
+          >
+            <FiX className="h-3.5 w-3.5" />
+            Reset Filters
+          </button>
+        )}
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white card-shadow dark:border-slate-700 dark:bg-slate-800">

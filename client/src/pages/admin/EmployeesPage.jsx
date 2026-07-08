@@ -2,16 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { Link } from 'react-router-dom';
-import {
-  FiPlus,
-  FiEdit2,
-  FiTrash2,
-  FiKey,
-  FiUserCheck,
-  FiBarChart2,
-  FiToggleLeft,
-  FiToggleRight,
-} from 'react-icons/fi';
+import { FiPlus, FiEdit2, FiTrash2, FiKey, FiUserCheck, FiBarChart2, FiToggleLeft, FiToggleRight, FiX } from 'react-icons/fi';
 import { PageHeader, Button, Input, Select, Badge, DataTable, ConfirmDialog } from '../../components/ui';
 import { useDebounce } from '../../hooks/useDebounce';
 import { getUsers, deleteUser, setUserStatus } from '../../api/users';
@@ -159,7 +150,7 @@ export default function EmployeesPage() {
         }
       />
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
         <Input
           placeholder="Search by name or email..."
           value={search}
@@ -192,6 +183,16 @@ export default function EmployeesPage() {
           ]}
           containerClassName="sm:w-40"
         />
+        {(search || department || status) && (
+          <button
+            onClick={() => { setSearch(''); setDepartment(''); setStatus(''); setPage(1); }}
+            className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-100 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50 sm:ml-auto"
+            title="Reset all filters"
+          >
+            <FiX className="h-3.5 w-3.5" />
+            Reset Filters
+          </button>
+        )}
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white card-shadow dark:border-slate-700 dark:bg-slate-800">

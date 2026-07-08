@@ -13,7 +13,7 @@ import {
   startOfYear,
   endOfYear,
 } from 'date-fns';
-import { FiDownload, FiCalendar, FiClock, FiCheckCircle, FiList, FiFilter } from 'react-icons/fi';
+import { FiDownload, FiCalendar, FiClock, FiCheckCircle, FiList, FiFilter, FiX } from 'react-icons/fi';
 import { PageHeader, Card, Button, Select, Input, Badge, statusColor, StatCard } from '../../components/ui';
 import { useAuth } from '../../hooks/useAuth';
 import { downloadPdfReport } from '../../api/reports';
@@ -238,9 +238,21 @@ export default function ReportsPage() {
       />
 
       <Card className="mb-6">
-        <p className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-          <FiFilter className="h-3.5 w-3.5" /> Filters
-        </p>
+        <div className="mb-3 flex items-center justify-between">
+          <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+            <FiFilter className="h-3.5 w-3.5" /> Filters
+          </p>
+          {(employeeId || departmentId || projectId || statusFilter) && (
+            <button
+              onClick={() => { setEmployeeId(''); setDepartmentId(''); setProjectId(''); setStatusFilter(''); }}
+              className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-100 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50"
+              title="Reset all filters"
+            >
+              <FiX className="h-3.5 w-3.5" />
+              Reset Filters
+            </button>
+          )}
+        </div>
 
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           <Select

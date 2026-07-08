@@ -11,6 +11,7 @@ import {
   FiCheckCircle,
   FiArchive,
   FiClipboard,
+  FiX,
 } from 'react-icons/fi';
 import {
   PageHeader,
@@ -323,6 +324,16 @@ export default function TasksPage() {
             containerClassName="w-40"
           />
         </div>
+        {(search || status || priority || project || department || employee || dateFrom || dateTo) && (
+          <button
+            onClick={() => { setSearch(''); setStatus(''); setPriority(''); setProject(''); setDepartment(''); setEmployee(''); setDateFrom(''); setDateTo(''); setPage(1); }}
+            className="ml-auto flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-100 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50"
+            title="Reset all filters"
+          >
+            <FiX className="h-3.5 w-3.5" />
+            Reset Filters
+          </button>
+        )}
       </div>
 
       {selectedIds.size > 0 && (
