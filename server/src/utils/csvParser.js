@@ -52,8 +52,13 @@ function parseCSV(text) {
 
 const parseCsvFile = (filePath) => {
   const content = fs.readFileSync(filePath, 'utf-8');
+  const { data } = parseCSVString(content);
+  return data;
+};
+
+const parseCSVString = (content) => {
   const rows = parseCSV(content);
-  if (rows.length === 0) return [];
+  if (rows.length === 0) return { headers: [], data: [] };
 
   // Clean headers (remove UTF-8 BOM if present, trim whitespaces)
   const headers = rows[0].map((h) => h.replace(/^\uFEFF/, '').trim());
@@ -68,7 +73,7 @@ const parseCsvFile = (filePath) => {
     });
     data.push(obj);
   }
-  return data;
+  return { headers, data };
 };
 
-module.exports = { parseCsvFile };
+module.exports = { parseCsvFile, parseCSVString, parseCSV };

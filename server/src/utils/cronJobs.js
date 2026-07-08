@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const Task = require('../models/Task');
 const { createNotification } = require('./notify');
+const { syncAllActiveSheets } = require('./googleSyncService');
 
 /**
  * Runs once a day and creates a reminder Notification for every task whose
@@ -42,4 +43,18 @@ const scheduleDeadlineReminderJob = () => {
   });
 };
 
-module.exports = { scheduleDeadlineReminderJob, runDeadlineReminderJob };
+const scheduleGoogleSyncJob = () => {
+  // Runs every 5 minutes
+  cron.schedule('*/5 * * * *', () => {
+    console.log('Running background Google Sheet synchronization...');
+    syncAllActiveSheets().catch((err) => {
+      console.error('Google Sheet Sync Job failed:', err.message);
+    });
+  });
+};
+
+module.exports = {
+  scheduleDeadlineReminderJob,
+  runDeadlineReminderJob,
+  scheduleGoogleSyncJob,
+};

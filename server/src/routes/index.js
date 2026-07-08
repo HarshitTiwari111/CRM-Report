@@ -17,6 +17,7 @@ const attendanceRoutes = require('./attendanceRoutes');
 const holidayRoutes = require('./holidayRoutes');
 const calendarRoutes = require('./calendarRoutes');
 const settingsRoutes = require('./settingsRoutes');
+const googleSheetRoutes = require('./googleSheetRoutes');
 
 const router = express.Router();
 
@@ -37,5 +38,6 @@ router.use('/attendance', attendanceRoutes);
 router.use('/holidays', holidayRoutes);
 router.use('/calendar', calendarRoutes);
 router.use('/settings', settingsRoutes);
+router.use('/google-sheets', googleSheetRoutes);
 
 module.exports = router;
