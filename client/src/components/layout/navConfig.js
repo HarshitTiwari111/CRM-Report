@@ -20,7 +20,7 @@ export const adminNav = [
 
 export const employeeNav = [
   { to: '/employee/dashboard', label: 'Dashboard', icon: FiGrid },
-  { to: '/employee/tasks', label: 'My Tasks', icon: FiCheckSquare },
+  { to: '/employee/tasks', label: 'Tasks', icon: FiCheckSquare },
   { to: '/employee/reports', label: 'Reports', icon: FiBarChart2 },
   { to: '/profile', label: 'Profile', icon: FiUser },
 ];
