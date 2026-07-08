@@ -104,7 +104,12 @@ export default function AdminDashboardPage() {
             )}
             {(recentActivity.latestReports || []).map((rep, idx) => (
               <li key={rep._id || idx} className="flex items-center justify-between gap-2">
-                <p className="truncate text-sm font-medium text-slate-700 dark:text-slate-300">{rep.title || rep.type}</p>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-slate-700 dark:text-slate-300">{rep.title || rep.type}</p>
+                  {rep.generatedBy && (
+                    <p className="text-xs text-slate-400 dark:text-slate-500">by {rep.generatedBy}</p>
+                  )}
+                </div>
                 <p className="text-xs text-slate-400 dark:text-slate-500">
                   {rep.createdAt ? format(new Date(rep.createdAt), 'MMM d') : ''}
                 </p>
