@@ -93,15 +93,23 @@ const listTasks = asyncHandler(async (req, res) => {
 
 // GET /tasks/copy-previous
 const copyPrevious = asyncHandler(async (req, res) => {
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  yesterday.setHours(0, 0, 0, 0);
-  const endOfYesterday = new Date(yesterday);
-  endOfYesterday.setHours(23, 59, 59, 999);
+  const mostRecentTask = await Task.findOne({ assignedTo: req.user._id })
+    .sort({ taskDate: -1 })
+    .select('taskDate');
+
+  if (!mostRecentTask || !mostRecentTask.taskDate) {
+    return res.json({ success: true, data: [] });
+  }
+
+  const targetDate = new Date(mostRecentTask.taskDate);
+  const startOfTargetDay = new Date(targetDate);
+  startOfTargetDay.setHours(0, 0, 0, 0);
+  const endOfTargetDay = new Date(targetDate);
+  endOfTargetDay.setHours(23, 59, 59, 999);
 
   const tasks = await Task.find({
     assignedTo: req.user._id,
-    taskDate: { $gte: yesterday, $lte: endOfYesterday },
+    taskDate: { $gte: startOfTargetDay, $lte: endOfTargetDay },
   }).populate(POPULATE_FIELDS);
 
   res.json({ success: true, data: tasks });

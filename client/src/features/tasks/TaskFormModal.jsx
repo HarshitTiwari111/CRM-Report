@@ -83,14 +83,14 @@ export default function TaskFormModal({ isOpen, onClose, task, prefill }) {
         taskType: source.taskType || 'development',
         startTime: source.startTime || '',
         endTime: source.endTime || '',
-        taskDate: toDateInput(source.taskDate) || format(new Date(), 'yyyy-MM-dd'),
+        taskDate: isEdit ? (toDateInput(task.taskDate) || format(new Date(), 'yyyy-MM-dd')) : format(new Date(), 'yyyy-MM-dd'),
         status: source.status || 'pending',
         assignedTo: source.assignedTo?._id || source.assignedTo || '',
       });
     } else {
       reset(defaultValues);
     }
-  }, [isOpen, task, prefill, reset, defaultValues]);
+  }, [isOpen, task, prefill, reset, defaultValues, isEdit]);
 
   const mutation = useMutation({
     mutationFn: (values) => {
