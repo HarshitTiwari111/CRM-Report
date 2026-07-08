@@ -5,7 +5,7 @@ import { format } from 'date-fns';
 import {
   FiRefreshCw, FiTrash2, FiAlertTriangle, FiLink,
   FiSearch, FiGlobe, FiLock, FiCopy, FiCheckCircle, FiGrid,
-  FiClock, FiUser, FiTag,
+  FiClock, FiUser, FiTag, FiX, FiExternalLink,
 } from 'react-icons/fi';
 import {
   PageHeader, Button, Input, ConfirmDialog, Card,
@@ -20,22 +20,28 @@ import {
    Helpers
 ──────────────────────────────────────────────────────────────────────────── */
 const STATUS_META = {
-  pending:      { bg: 'bg-slate-100 dark:bg-slate-700',   text: 'text-slate-600 dark:text-slate-300', dot: 'bg-slate-400' },
-  'in-progress':{ bg: 'bg-blue-100 dark:bg-blue-900/40',  text: 'text-blue-700 dark:text-blue-300',   dot: 'bg-blue-500' },
-  completed:    { bg: 'bg-green-100 dark:bg-green-900/40',text: 'text-green-700 dark:text-green-300',  dot: 'bg-green-500' },
-  hold:         { bg: 'bg-yellow-100 dark:bg-yellow-900/40',text:'text-yellow-700 dark:text-yellow-300',dot:'bg-yellow-500'},
-  cancelled:    { bg: 'bg-red-100 dark:bg-red-900/40',    text: 'text-red-700 dark:text-red-300',     dot: 'bg-red-500' },
+  pending: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-600 dark:text-slate-300', dot: 'bg-slate-400' },
+  'in-progress': { bg: 'bg-blue-100 dark:bg-blue-900/40', text: 'text-blue-700 dark:text-blue-300', dot: 'bg-blue-500' },
+  completed: { bg: 'bg-green-100 dark:bg-green-900/40', text: 'text-green-700 dark:text-green-300', dot: 'bg-green-500' },
+  hold: { bg: 'bg-yellow-100 dark:bg-yellow-900/40', text: 'text-yellow-700 dark:text-yellow-300', dot: 'bg-yellow-500' },
+  cancelled: { bg: 'bg-red-100 dark:bg-red-900/40', text: 'text-red-700 dark:text-red-300', dot: 'bg-red-500' },
 };
 const PRIORITY_META = {
-  low:    { bg: 'bg-slate-100 dark:bg-slate-700',    text: 'text-slate-600 dark:text-slate-300' },
-  medium: { bg: 'bg-blue-100 dark:bg-blue-900/40',   text: 'text-blue-700 dark:text-blue-300' },
-  high:   { bg: 'bg-orange-100 dark:bg-orange-900/40',text:'text-orange-700 dark:text-orange-300' },
-  urgent: { bg: 'bg-red-100 dark:bg-red-900/40',     text: 'text-red-700 dark:text-red-300' },
+  low: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-600 dark:text-slate-300' },
+  medium: { bg: 'bg-blue-100 dark:bg-blue-900/40', text: 'text-blue-700 dark:text-blue-300' },
+  high: { bg: 'bg-orange-100 dark:bg-orange-900/40', text: 'text-orange-700 dark:text-orange-300' },
+  urgent: { bg: 'bg-red-100 dark:bg-red-900/40', text: 'text-red-700 dark:text-red-300' },
 };
 
-const isStatus   = (v) => !!STATUS_META[String(v).toLowerCase()];
+const isStatus = (v) => !!STATUS_META[String(v).toLowerCase()];
 const isPriority = (v) => !!PRIORITY_META[String(v).toLowerCase()];
-const SHORT = 70; // chars — below this = chip; above = expandable panel
+const LONG = 60; // chars — above this we treat the field as a "long" field in the detail panel
+
+/* Hide scrollbars but keep scrolling functional (Chrome/Safari + Firefox + IE/Edge) */
+const HIDE_SCROLLBAR_CSS = `
+  .hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+  .hide-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }
+`;
 
 /* ────────────────────────────────────────────────────────────────────────────
    Apps Script builder
@@ -44,103 +50,209 @@ const buildAppsScript = (apiBase) =>
   `function syncTasksToCRM() {\n  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();\n  var rows = sheet.getDataRange().getValues();\n  var crmUrl = "${apiBase}/api/google-sheets/webhook-sync";\n  var payload = JSON.stringify({\n    url: SpreadsheetApp.getActiveSpreadsheet().getUrl(),\n    rows: rows\n  });\n  var options = {\n    method: "post",\n    contentType: "application/json",\n    payload: payload,\n    muteHttpExceptions: true\n  };\n  var response = UrlFetchApp.fetch(crmUrl, options);\n  Logger.log("Response: " + response.getContentText());\n}`;
 
 /* ────────────────────────────────────────────────────────────────────────────
-   TaskCard
+   Small presentational bits shared by table + detail panel
 ──────────────────────────────────────────────────────────────────────────── */
-function TaskCard({ row, headers }) {
-  const data = row.data || {};
+function StatusChip({ value }) {
+  const lower = String(value).toLowerCase();
+  if (isStatus(lower)) {
+    const m = STATUS_META[lower];
+    return (
+      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ${m.bg} ${m.text}`}>
+        <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${m.dot}`} />
+        {value}
+      </span>
+    );
+  }
+  if (isPriority(lower)) {
+    const m = PRIORITY_META[lower];
+    return (
+      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ${m.bg} ${m.text}`}>
+        {value}
+      </span>
+    );
+  }
+  return null;
+}
 
-  // Pick best title field
+const fieldIcon = (header) => {
+  const h = header.toLowerCase();
+  if (h.includes('date') || h.includes('timestamp')) return FiClock;
+  if (h.includes('name') || h.includes('who') || h.includes('vertical')) return FiUser;
+  return FiTag;
+};
+
+const formatIfDate = (header, value) => {
+  const h = header.toLowerCase();
+  if (!h.includes('date') && !h.includes('timestamp')) return value;
+  const p = new Date(value);
+  if (isNaN(p)) return value;
+  try { return format(p, 'MMM d, yyyy'); } catch (_) { return value; }
+};
+
+/* ────────────────────────────────────────────────────────────────────────────
+   TaskTable — replaces the card grid
+──────────────────────────────────────────────────────────────────────────── */
+function TaskTable({ rows, headers, onRowClick, activeRowId }) {
   const titleKey =
     headers.find((h) => /task.?name|title|subject/i.test(h)) ||
     headers[1] ||
     headers[0];
-  const title = String(data[titleKey] || 'Untitled Task').trim();
-
   const otherHeaders = headers.filter((h) => h !== titleKey);
 
-  // Split: short values → chips; long values → panels
-  const chipHeaders  = otherHeaders.filter((h) => String(data[h] || '').trim().length <= SHORT);
-  const panelHeaders = otherHeaders.filter((h) => String(data[h] || '').trim().length > SHORT);
-
-  const renderChip = (h) => {
-    const v = String(data[h] || '').trim();
-    if (!v) return null;
-    const lower = v.toLowerCase();
-
-    if (isStatus(lower)) {
-      const m = STATUS_META[lower];
-      return (
-        <span key={h} className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${m.bg} ${m.text}`}>
-          <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${m.dot}`} />
-          {v}
-        </span>
-      );
-    }
-    if (isPriority(lower)) {
-      const m = PRIORITY_META[lower];
-      return (
-        <span key={h} className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${m.bg} ${m.text}`}>
-          {v}
-        </span>
-      );
-    }
-
-    const hLow = h.toLowerCase();
-    const isDate = hLow.includes('date') || hLow.includes('timestamp');
-    const Icon = isDate ? FiClock : hLow.includes('name') || hLow.includes('who') || hLow.includes('vertical') ? FiUser : FiTag;
-    let display = v;
-    if (isDate) {
-      const p = new Date(v);
-      if (!isNaN(p)) { try { display = format(p, 'MMM d, yyyy'); } catch (_) { /**/ } }
-    }
-
-    return (
-      <span key={h} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-50 dark:bg-slate-700/60 px-2.5 py-1 text-xs text-slate-600 dark:text-slate-300">
-        <Icon className="h-3 w-3 text-slate-400 flex-shrink-0" />
-        <span className="font-medium text-slate-400 dark:text-slate-500 mr-0.5">{h}:</span>
-        {display}
-      </span>
-    );
-  };
-
   return (
-    <div className="flex flex-col rounded-2xl border border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200 dark:border-slate-700 dark:bg-slate-800 overflow-hidden">
-      {/* coloured top bar */}
-      <div className="h-1.5 w-full bg-gradient-to-r from-primary-500 to-indigo-500 flex-shrink-0" />
-
-      <div className="flex flex-col flex-1 gap-4 p-5">
-        {/* Title */}
-        <h3 className="font-semibold text-slate-800 dark:text-slate-100 text-base leading-snug">
-          {title}
-        </h3>
-
-        {/* Chips row */}
-        {chipHeaders.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {chipHeaders.map(renderChip)}
-          </div>
-        )}
-
-        {/* Long-text panels with internal scroll */}
-        {panelHeaders.map((h) => {
-          const v = String(data[h] || '').trim();
-          if (!v) return null;
-          return (
-            <div key={h} className="rounded-xl bg-slate-50 dark:bg-slate-700/40 p-3 flex flex-col gap-1.5">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{h}</p>
-              <div className="max-h-36 overflow-y-auto pr-1">
-                <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap break-words">
-                  {v}
-                </p>
-              </div>
-            </div>
-          );
-        })}
+    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800 overflow-hidden">
+      <div className="overflow-x-auto hide-scrollbar">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="bg-slate-50 dark:bg-slate-700/40 border-b border-slate-200 dark:border-slate-700">
+              <th className="sticky left-0 z-20 bg-slate-50 dark:bg-slate-700/40 text-left font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide text-xs px-4 py-3 min-w-[220px]">
+                {titleKey}
+              </th>
+              {otherHeaders.map((h) => (
+                <th
+                  key={h}
+                  className="text-left font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide text-xs px-4 py-3 whitespace-nowrap min-w-[140px]"
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const data = row.data || {};
+              const title = String(data[titleKey] || 'Untitled Task').trim();
+              const isActive = activeRowId === row._id;
+              const rowBg = isActive
+                ? 'bg-primary-50 dark:bg-primary-900/20'
+                : 'bg-white dark:bg-slate-800 group-hover:bg-slate-50 dark:group-hover:bg-slate-700/30';
+              return (
+                <tr
+                  key={row._id}
+                  onClick={() => onRowClick(row)}
+                  className={`group cursor-pointer border-b border-slate-100 dark:border-slate-700/60 transition-colors ${isActive ? 'bg-primary-50 dark:bg-primary-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'
+                    }`}
+                >
+                  {/* Sticky column needs its OWN solid background (not transparent/inherit),
+                      otherwise the horizontally-scrolling columns behind it show through
+                      and overlap the title text while scrolling. */}
+                  <td className={`sticky left-0 z-10 px-4 py-3 font-medium text-slate-800 dark:text-slate-100 max-w-[280px] transition-colors ${rowBg}`}>
+                    <div className="overflow-x-auto hide-scrollbar whitespace-nowrap">{title}</div>
+                  </td>
+                  {otherHeaders.map((h) => {
+                    const raw = String(data[h] || '').trim();
+                    if (!raw) return <td key={h} className="px-4 py-3 text-slate-300 dark:text-slate-600">—</td>;
+                    const lower = raw.toLowerCase();
+                    if (isStatus(lower) || isPriority(lower)) {
+                      return (
+                        <td key={h} className="px-4 py-3">
+                          <StatusChip value={raw} />
+                        </td>
+                      );
+                    }
+                    const display = formatIfDate(h, raw);
+                    return (
+                      <td key={h} className="px-4 py-3 text-slate-600 dark:text-slate-300 max-w-[220px]">
+                        <div className="overflow-x-auto hide-scrollbar whitespace-nowrap">{display}</div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
 }
 
+/* ────────────────────────────────────────────────────────────────────────────
+   TaskDetailModal — full record on click, like the reference screenshot
+──────────────────────────────────────────────────────────────────────────── */
+function TaskDetailModal({ row, headers, onClose }) {
+  if (!row) return null;
+  const data = row.data || {};
+
+  const titleKey =
+    headers.find((h) => /task.?name|title|subject/i.test(h)) ||
+    headers[1] ||
+    headers[0];
+  const title = String(data[titleKey] || 'Untitled Task').trim();
+  const otherHeaders = headers.filter((h) => h !== titleKey);
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-[1px]" onClick={onClose}>
+      <div
+        className="h-full w-full max-w-lg bg-white dark:bg-slate-800 shadow-2xl flex flex-col animate-in slide-in-from-right"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100 dark:border-slate-700 px-6 py-5">
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100 leading-snug">{title}</h2>
+          <button
+            onClick={onClose}
+            className="flex-shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 transition-colors"
+          >
+            <FiX className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Body — ALL headers rendered in ONE loop, same order every time */}
+        <div className="flex-1 min-h-0 overflow-y-auto hide-scrollbar px-6 py-5 flex flex-col gap-3">
+          {otherHeaders.map((h) => {
+            const raw = data[h];
+            const value = String(raw ?? '').trim();
+            const lower = value.toLowerCase();
+            const Icon = fieldIcon(h);
+
+            // Status/Priority → chip
+            if (value && (isStatus(lower) || isPriority(lower))) {
+              return (
+                <div key={h} className="flex items-center gap-3 rounded-xl border border-slate-100 dark:border-slate-700 px-4 py-2.5">
+                  <Icon className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500 w-32 flex-shrink-0">
+                    {h}
+                  </span>
+                  <StatusChip value={raw} />
+                </div>
+              );
+            }
+
+            // Long text → stacked block with internal scroll (content never hidden, just scrollable)
+            if (value.length > LONG) {
+              return (
+                <div key={h} className="rounded-xl bg-slate-50 dark:bg-slate-700/40 p-4 flex flex-col gap-1.5">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{h}</p>
+                  <div className="max-h-64 overflow-y-auto hide-scrollbar pr-1">
+                    <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap break-words">
+                      {value}
+                    </p>
+                  </div>
+                </div>
+              );
+            }
+
+            // Short field (or empty) → single inline row, always shown, "—" if empty
+            return (
+              <div key={h} className="flex items-center gap-3 rounded-xl border border-slate-100 dark:border-slate-700 px-4 py-2.5">
+                <Icon className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500 w-32 flex-shrink-0">
+                  {h}
+                </span>
+                <span className={`text-sm break-words overflow-x-auto hide-scrollbar whitespace-nowrap ${
+                  value ? 'text-slate-700 dark:text-slate-200' : 'text-slate-300 dark:text-slate-600'
+                }`}>
+                  {value ? formatIfDate(h, raw) : '—'}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
 /* ────────────────────────────────────────────────────────────────────────────
    Main page component
 ──────────────────────────────────────────────────────────────────────────── */
@@ -156,6 +268,7 @@ export default function TasksPage() {
   const [syncMode, setSyncMode] = useState('push');
   const [disconnectConfirm, setDisconnectConfirm] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [selectedRow, setSelectedRow] = useState(null);
 
   const rawApiUrl = import.meta.env.VITE_API_URL || 'https://crm-report-api.onrender.com/api';
   const apiBase = rawApiUrl.replace(/\/api$/, '');
@@ -226,6 +339,7 @@ export default function TasksPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <style>{HIDE_SCROLLBAR_CSS}</style>
       <PageHeader title="Task Management" subtitle="Sync and track tasks from your Google Sheet" />
 
       {/* ──────────── NOT CONFIGURED ──────────── */}
@@ -237,7 +351,7 @@ export default function TasksPage() {
             </div>
             <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Link Your Google Sheet</h2>
             <p className="mt-2 text-sm text-slate-500 max-w-sm mx-auto">
-              Connect your Google Sheet to view tasks in beautiful cards automatically.
+              Connect your Google Sheet to view tasks in a table automatically.
             </p>
           </div>
 
@@ -247,16 +361,15 @@ export default function TasksPage() {
                 <label className="text-sm font-medium text-slate-700 dark:text-slate-300 block mb-2">Sheet Access Type</label>
                 <div className="grid grid-cols-2 gap-3">
                   {[
-                    { val: 'pull', Icon: FiGlobe, label: 'Public Sheet',  sub: 'Anyone with link can view' },
-                    { val: 'push', Icon: FiLock,  label: 'Private Sheet', sub: 'Via Google Apps Script' },
+                    { val: 'pull', Icon: FiGlobe, label: 'Public Sheet', sub: 'Anyone with link can view' },
+                    { val: 'push', Icon: FiLock, label: 'Private Sheet', sub: 'Via Google Apps Script' },
                   ].map(({ val, Icon, label, sub }) => (
                     <button
                       key={val} type="button" onClick={() => setSyncMode(val)}
-                      className={`flex items-center gap-3 rounded-xl border p-4 text-left transition-all ${
-                        syncMode === val
-                          ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/30 dark:border-primary-400'
-                          : 'border-slate-200 dark:border-slate-700 hover:border-slate-300'
-                      }`}
+                      className={`flex items-center gap-3 rounded-xl border p-4 text-left transition-all ${syncMode === val
+                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/30 dark:border-primary-400'
+                        : 'border-slate-200 dark:border-slate-700 hover:border-slate-300'
+                        }`}
                     >
                       <Icon className={`h-5 w-5 flex-shrink-0 ${syncMode === val ? 'text-primary-600' : 'text-slate-400'}`} />
                       <div>
@@ -296,13 +409,12 @@ export default function TasksPage() {
             <div>
               <div className="flex items-center flex-wrap gap-2">
                 <h3 className="font-semibold text-slate-800 dark:text-slate-100">{config.name}</h3>
-                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                  isPushMode
-                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
-                    : config.syncError
-                      ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-                      : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
-                }`}>
+                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${isPushMode
+                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                  : config.syncError
+                    ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                    : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+                  }`}>
                   {isPushMode ? 'Private (Apps Script)' : config.syncError ? 'Sync Failed' : 'Active Sync'}
                 </span>
               </div>
@@ -377,15 +489,15 @@ export default function TasksPage() {
               </div>
             )}
             <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">
-              {totalTasks} task{totalTasks !== 1 ? 's' : ''}
+              {totalTasks} task{totalTasks !== 1 ? 's' : ''} · click a row to view full details
             </span>
           </div>
 
-          {/* ──────────── CARDS GRID ──────────── */}
+          {/* ──────────── TABLE ──────────── */}
           {tasksLoading ? (
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-52 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 animate-pulse" />
+            <div className="flex flex-col gap-2">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="h-11 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 animate-pulse" />
               ))}
             </div>
           ) : tasksData.length === 0 ? (
@@ -399,11 +511,12 @@ export default function TasksPage() {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                {tasksData.map((row) => (
-                  <TaskCard key={row._id} row={row} headers={config.headers || []} />
-                ))}
-              </div>
+              <TaskTable
+                rows={tasksData}
+                headers={config.headers || []}
+                onRowClick={setSelectedRow}
+                activeRowId={selectedRow?._id}
+              />
 
               {/* Pagination */}
               {totalPages > 1 && (
@@ -430,6 +543,14 @@ export default function TasksPage() {
             </>
           )}
         </>
+      )}
+
+      {selectedRow && (
+        <TaskDetailModal
+          row={selectedRow}
+          headers={config?.headers || []}
+          onClose={() => setSelectedRow(null)}
+        />
       )}
 
       <ConfirmDialog
