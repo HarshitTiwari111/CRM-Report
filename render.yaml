@@ -32,8 +32,9 @@ services:
       - key: SMTP_FROM
         sync: false
 
-  - type: static
+  - type: web
     name: crm-report-client
+    env: static
     rootDir: client
     buildCommand: npm install && npm run build
     staticPublishPath: dist
