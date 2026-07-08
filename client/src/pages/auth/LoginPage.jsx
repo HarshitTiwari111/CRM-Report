@@ -73,9 +73,6 @@ export default function LoginPage() {
 
         <div className="flex items-center justify-between">
           <Checkbox label="Remember me" {...register('rememberMe')} />
-          <Link to="/forgot-password" className="text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300">
-            Forgot password?
-          </Link>
         </div>
 
         <Button type="submit" className="mt-2 w-full" isLoading={mutation.isPending}>
