@@ -96,11 +96,19 @@ const myAttendance = asyncHandler(async (req, res) => {
 
 // GET /attendance (superadmin, all employees, filters)
 const allAttendance = asyncHandler(async (req, res) => {
-  const { user, dateFrom, dateTo, page = 1, limit = 30 } = req.query;
+  const { user, employee, date, dateFrom, dateTo, page = 1, limit = 30 } = req.query;
 
   const filter = {};
-  if (user) filter.user = user;
-  if (dateFrom || dateTo) {
+  const userId = user || employee;
+  if (userId) filter.user = userId;
+
+  if (date) {
+    const start = new Date(date);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(date);
+    end.setHours(23, 59, 59, 999);
+    filter.date = { $gte: start, $lte: end };
+  } else if (dateFrom || dateTo) {
     filter.date = {};
     if (dateFrom) filter.date.$gte = new Date(dateFrom);
     if (dateTo) filter.date.$lte = new Date(dateTo);

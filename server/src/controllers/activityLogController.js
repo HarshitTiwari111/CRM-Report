@@ -1,4 +1,6 @@
 const ActivityLog = require('../models/ActivityLog');
+const User = require('../models/User');
+const mongoose = require('mongoose');
 const asyncHandler = require('../utils/asyncHandler');
 
 // GET /activity-logs
@@ -6,7 +8,20 @@ const listActivityLogs = asyncHandler(async (req, res) => {
   const { page = 1, limit = 20, user, action, dateFrom, dateTo } = req.query;
 
   const filter = {};
-  if (user) filter.user = user;
+  if (user) {
+    if (mongoose.Types.ObjectId.isValid(user)) {
+      filter.user = user;
+    } else {
+      const users = await User.find({
+        $or: [
+          { name: { $regex: user, $options: 'i' } },
+          { email: { $regex: user, $options: 'i' } },
+          { employeeId: { $regex: user, $options: 'i' } },
+        ],
+      }).select('_id');
+      filter.user = { $in: users.map((u) => u._id) };
+    }
+  }
   if (action) filter.action = { $regex: action, $options: 'i' };
   if (dateFrom || dateTo) {
     filter.createdAt = {};
