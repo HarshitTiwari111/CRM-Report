@@ -345,7 +345,7 @@ export default function TasksPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [assigningTaskId, setAssigningTaskId] = useState('');
 
-  const rawApiUrl = import.meta.env.VITE_API_URL || 'https://crm-report-api.onrender.com/api';
+  const rawApiUrl = import.meta.env.VITE_API_URL || '/api';
   const apiBase = rawApiUrl.replace(/\/api$/, '');
   const appsScriptCode = buildAppsScript(apiBase);
 
