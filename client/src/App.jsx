@@ -22,6 +22,7 @@ const EmployeeDashboardPage = lazy(() => import('./pages/employee/EmployeeDashbo
 const AssignedTasksPage = lazy(() => import('./pages/employee/AssignedTasksPage'));
 
 const TasksPage = lazy(() => import('./pages/shared/TasksPage'));
+const DailyUpdatesPage = lazy(() => import('./pages/shared/DailyUpdatesPage'));
 const ReportsPage = lazy(() => import('./pages/shared/ReportsPage'));
 const ProfilePage = lazy(() => import('./pages/shared/ProfilePage'));
 
@@ -71,6 +72,7 @@ export default function App() {
               <Route path="/admin/employees/:id/performance" element={<EmployeePerformancePage />} />
               <Route path="/admin/tasks" element={<TasksPage />} />
               <Route path="/admin/task-monitor" element={<TaskMonitorPage />} />
+              <Route path="/admin/daily-updates" element={<DailyUpdatesPage />} />
               <Route path="/admin/reports" element={<ReportsPage />} />
               <Route path="/admin/departments" element={<DepartmentsPage />} />
               <Route path="/admin/activity-logs" element={<ActivityLogsPage />} />
@@ -81,6 +83,7 @@ export default function App() {
               <Route path="/employee/dashboard" element={<EmployeeDashboardPage />} />
               <Route path="/employee/tasks" element={<TasksPage />} />
               <Route path="/employee/assigned-tasks" element={<AssignedTasksPage />} />
+              <Route path="/employee/daily-updates" element={<DailyUpdatesPage />} />
               <Route path="/employee/reports" element={<ReportsPage />} />
             </Route>
           </Route>

@@ -14,6 +14,7 @@ const holidayRoutes = require('./holidayRoutes');
 const calendarRoutes = require('./calendarRoutes');
 const settingsRoutes = require('./settingsRoutes');
 const googleSheetRoutes = require('./googleSheetRoutes');
+const dailyUpdateRoutes = require('./dailyUpdateRoutes');
 
 const router = express.Router();
 
@@ -31,5 +32,6 @@ router.use('/holidays', holidayRoutes);
 router.use('/calendar', calendarRoutes);
 router.use('/settings', settingsRoutes);
 router.use('/google-sheets', googleSheetRoutes);
+router.use('/daily-updates', dailyUpdateRoutes);
 
 module.exports = router;
