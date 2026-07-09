@@ -40,7 +40,7 @@ services:
     staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
-        sync: false
+        value: https://crm-report-api.onrender.com/api
     routes:
       - type: rewrite
         source: /*

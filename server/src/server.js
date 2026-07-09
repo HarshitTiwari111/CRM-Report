@@ -1,5 +1,10 @@
 const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+// Force-load local .env values. This prevents OS/terminal-level env vars
+// (like MONGO_URI) from overriding what you set for local development.
+require('dotenv').config({
+  path: path.resolve(__dirname, '../.env'),
+  override: true,
+});
 const http = require('http');
 const app = require('./app');
 const connectDB = require('./config/db');
