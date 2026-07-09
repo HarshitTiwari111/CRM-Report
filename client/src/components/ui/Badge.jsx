@@ -14,6 +14,7 @@ const colorMap = {
 // Domain-specific mappers so components don't repeat this logic
 export const statusColor = {
   pending: 'slate',
+  assigned: 'blue',
   'in-progress': 'blue',
   completed: 'green',
   hold: 'yellow',

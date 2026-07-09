@@ -8,4 +8,13 @@ export const syncGoogleSheet = (id) => axiosInstance.post(`/google-sheets/${id}/
 
 export const getGoogleSheetTasks = (id, params) => axiosInstance.get(`/google-sheets/${id}/tasks`, { params });
 
+export const selfAssignGoogleSheetTask = (taskId) =>
+  axiosInstance.patch(`/google-sheets/tasks/${taskId}/self-assign`);
+
+export const assignGoogleSheetTask = (taskId, employeeId) =>
+  axiosInstance.patch(`/google-sheets/tasks/${taskId}/assign`, { employeeId });
+
+export const updateGoogleSheetTaskProgress = (taskId, payload) =>
+  axiosInstance.patch(`/google-sheets/tasks/${taskId}/progress`, payload);
+
 export const deleteGoogleSheet = (id) => axiosInstance.delete(`/google-sheets/${id}`);

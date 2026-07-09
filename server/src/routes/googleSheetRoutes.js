@@ -1,12 +1,24 @@
 const express = require('express');
 const GoogleSheetConfig = require('../models/GoogleSheetConfig');
 const GoogleSheetTask = require('../models/GoogleSheetTask');
-const { syncSingleSheet } = require('../utils/googleSyncService');
+const User = require('../models/User');
+const { syncSingleSheet, upsertSheetTasks } = require('../utils/googleSyncService');
 const { protect } = require('../middleware/auth');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 
 const router = express.Router();
+
+const TRACKING_STATUSES = ['pending', 'assigned', 'in-progress', 'completed', 'hold', 'cancelled'];
+
+const normalizeProgress = (value) => {
+  if (value === undefined || value === null || value === '') return undefined;
+  const progress = Number(value);
+  if (!Number.isFinite(progress)) {
+    throw new ApiError(400, 'Progress must be a number between 0 and 100');
+  }
+  return Math.min(100, Math.max(0, Math.round(progress)));
+};
 
 // POST /api/google-sheets/webhook-sync - Google Apps Script webhook to sync private sheets
 router.post(
@@ -49,28 +61,14 @@ router.post(
       data.push(obj);
     }
 
-    // 1. Delete all existing tasks for this configuration
-    await GoogleSheetTask.deleteMany({ config: matchedConfig._id });
+    await upsertSheetTasks(matchedConfig._id, data);
 
-    // 2. Prepare new tasks for insertion
-    const tasksToInsert = data.map((row, index) => ({
-      config: matchedConfig._id,
-      rowNumber: index + 1,
-      data: row,
-    }));
-
-    // 3. Bulk insert to database
-    if (tasksToInsert.length > 0) {
-      await GoogleSheetTask.insertMany(tasksToInsert);
-    }
-
-    // 4. Update configuration
     matchedConfig.headers = headers;
     matchedConfig.lastSyncedAt = new Date();
     matchedConfig.syncError = '';
     await matchedConfig.save();
 
-    res.json({ success: true, data: { count: tasksToInsert.length } });
+    res.json({ success: true, data: { count: data.length } });
   })
 );
 
@@ -160,22 +158,49 @@ router.get(
       throw new ApiError(404, 'Configuration not found');
     }
 
-    const { page = 1, limit = 20, search } = req.query;
+    const { page = 1, limit = 20, search, employee, status, view, assigned } = req.query;
 
     const pageNum = Math.max(1, parseInt(page, 10) || 1);
     const limitNum = Math.max(1, parseInt(limit, 10) || 20);
 
     const filter = { config: config._id };
 
+    if (req.user.role === 'employee') {
+      if (view === 'available') {
+        filter.assignedTo = null;
+      } else if (view === 'mine') {
+        filter.assignedTo = req.user._id;
+      } else {
+        filter.$or = [{ assignedTo: null }, { assignedTo: req.user._id }];
+      }
+    } else if (employee) {
+      filter.assignedTo = employee;
+    } else if (assigned === 'only') {
+      filter.assignedTo = { $ne: null };
+    }
+
+    if (status) {
+      filter.status = status;
+    }
+
     if (search && config.headers && config.headers.length > 0) {
       const regex = new RegExp(search, 'i');
-      filter.$or = config.headers.map((header) => ({
+      const searchOr = config.headers.map((header) => ({
         [`data.${header}`]: { $regex: regex },
       }));
+
+      if (filter.$or) {
+        filter.$and = [{ $or: filter.$or }, { $or: searchOr }];
+        delete filter.$or;
+      } else {
+        filter.$or = searchOr;
+      }
     }
 
     const [tasks, total] = await Promise.all([
       GoogleSheetTask.find(filter)
+        .populate('assignedTo', 'name email employeeId')
+        .populate('assignedBy', 'name email employeeId role')
         .sort({ rowNumber: 1 })
         .skip((pageNum - 1) * limitNum)
         .limit(limitNum),
@@ -192,6 +217,131 @@ router.get(
         pages: Math.ceil(total / limitNum),
       },
     });
+  })
+);
+
+// PATCH /api/google-sheets/tasks/:taskId/self-assign - Employee claims an available task
+router.patch(
+  '/tasks/:taskId/self-assign',
+  asyncHandler(async (req, res) => {
+    if (req.user.role !== 'employee') {
+      throw new ApiError(403, 'Only employees can self-assign tasks');
+    }
+
+    const task = await GoogleSheetTask.findOneAndUpdate(
+      {
+        _id: req.params.taskId,
+        assignedTo: null,
+      },
+      {
+        $set: {
+          assignedTo: req.user._id,
+          assignedAt: new Date(),
+          assignedBy: req.user._id,
+          assignmentSource: 'employee',
+          status: 'assigned',
+          progress: 0,
+        },
+      },
+      { new: true }
+    )
+      .populate('assignedTo', 'name email employeeId')
+      .populate('assignedBy', 'name email employeeId role');
+
+    if (!task) {
+      throw new ApiError(409, 'This task has already been assigned to someone else');
+    }
+
+    res.json({ success: true, data: task });
+  })
+);
+
+// PATCH /api/google-sheets/tasks/:taskId/assign - Admin assigns or reassigns a task
+router.patch(
+  '/tasks/:taskId/assign',
+  asyncHandler(async (req, res) => {
+    if (req.user.role !== 'superadmin') {
+      throw new ApiError(403, 'Access denied. Superadmins only.');
+    }
+
+    const { employeeId } = req.body;
+    if (!employeeId) {
+      throw new ApiError(400, 'Employee is required');
+    }
+
+    const employee = await User.findOne({ _id: employeeId, role: 'employee', isActive: true });
+    if (!employee) {
+      throw new ApiError(404, 'Employee not found');
+    }
+
+    const task = await GoogleSheetTask.findByIdAndUpdate(
+      req.params.taskId,
+      {
+        $set: {
+          assignedTo: employee._id,
+          assignedAt: new Date(),
+          assignedBy: req.user._id,
+          assignmentSource: 'admin',
+          status: 'assigned',
+          progress: 0,
+        },
+      },
+      { new: true }
+    )
+      .populate('assignedTo', 'name email employeeId')
+      .populate('assignedBy', 'name email employeeId role');
+
+    if (!task) {
+      throw new ApiError(404, 'Task not found');
+    }
+
+    res.json({ success: true, data: task });
+  })
+);
+
+// PATCH /api/google-sheets/tasks/:taskId/progress - Update assigned task tracking
+router.patch(
+  '/tasks/:taskId/progress',
+  asyncHandler(async (req, res) => {
+    const { status } = req.body;
+    const progress = normalizeProgress(req.body.progress);
+
+    if (status && !TRACKING_STATUSES.includes(status)) {
+      throw new ApiError(400, 'Invalid task status');
+    }
+
+    if (!status && progress === undefined) {
+      throw new ApiError(400, 'Status or progress is required');
+    }
+
+    const task = await GoogleSheetTask.findById(req.params.taskId);
+    if (!task) {
+      throw new ApiError(404, 'Task not found');
+    }
+
+    if (!task.assignedTo) {
+      throw new ApiError(400, 'Task must be assigned before progress can be updated');
+    }
+
+    if (req.user.role === 'employee' && !task.assignedTo.equals(req.user._id)) {
+      throw new ApiError(403, 'You can only update your own assigned tasks');
+    }
+
+    if (status) task.status = status;
+    if (progress !== undefined) task.progress = progress;
+
+    if (task.status === 'completed' && task.progress < 100) {
+      task.progress = 100;
+    }
+
+    await task.save();
+
+    const populated = await task.populate([
+      { path: 'assignedTo', select: 'name email employeeId' },
+      { path: 'assignedBy', select: 'name email employeeId role' },
+    ]);
+
+    res.json({ success: true, data: populated });
   })
 );
 

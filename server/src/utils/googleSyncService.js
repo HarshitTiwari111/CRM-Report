@@ -43,6 +43,39 @@ const fetchCsv = (sheetId, gid) => {
   });
 };
 
+const upsertSheetTasks = async (configId, data) => {
+  const operations = data.map((row, index) => ({
+    updateOne: {
+      filter: { config: configId, rowNumber: index + 1 },
+      update: {
+        $set: {
+          config: configId,
+          rowNumber: index + 1,
+          data: row,
+        },
+        $setOnInsert: {
+          status: 'pending',
+          progress: 0,
+          assignedTo: null,
+          assignedAt: null,
+          assignedBy: null,
+          assignmentSource: null,
+        },
+      },
+      upsert: true,
+    },
+  }));
+
+  if (operations.length > 0) {
+    await GoogleSheetTask.bulkWrite(operations);
+  }
+
+  await GoogleSheetTask.deleteMany({
+    config: configId,
+    rowNumber: { $gt: data.length },
+  });
+};
+
 const syncSingleSheet = async (config) => {
   const info = extractSheetInfo(config.url);
   if (!info) {
@@ -56,28 +89,15 @@ const syncSingleSheet = async (config) => {
     throw new Error('No headers found in the Google Sheet');
   }
 
-  // 1. Delete all existing tasks for this configuration
-  await GoogleSheetTask.deleteMany({ config: config._id });
+  await upsertSheetTasks(config._id, data);
 
-  // 2. Prepare new tasks for insertion
-  const tasksToInsert = data.map((row, index) => ({
-    config: config._id,
-    rowNumber: index + 1,
-    data: row,
-  }));
-
-  // 3. Bulk insert to database
-  if (tasksToInsert.length > 0) {
-    await GoogleSheetTask.insertMany(tasksToInsert);
-  }
-
-  // 4. Update configuration with headers and last synced status
+  // Update configuration with headers and last synced status
   config.headers = headers;
   config.lastSyncedAt = new Date();
   config.syncError = '';
   await config.save();
 
-  return { success: true, count: tasksToInsert.length };
+  return { success: true, count: data.length };
 };
 
 const syncAllActiveSheets = async () => {
@@ -97,4 +117,5 @@ module.exports = {
   syncSingleSheet,
   syncAllActiveSheets,
   extractSheetInfo,
+  upsertSheetTasks,
 };

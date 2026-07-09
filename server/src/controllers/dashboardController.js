@@ -1,4 +1,5 @@
 const Task = require('../models/Task');
+const GoogleSheetTask = require('../models/GoogleSheetTask');
 const User = require('../models/User');
 const Department = require('../models/Department');
 const Team = require('../models/Team');
@@ -27,12 +28,15 @@ const startOfMonth = () => {
 };
 
 const countTasks = (filter) => Task.countDocuments(filter);
+const countSheetTasks = (filter) => GoogleSheetTask.countDocuments(filter);
 
 const REPORT_ACTION_LABELS = {
   'export-report-pdf': 'PDF Report',
   'export-report-excel': 'Excel Report',
   'export-report-csv': 'CSV Report',
 };
+
+const pendingSheetStatuses = ['pending', 'assigned'];
 
 // GET /dashboard/admin
 const adminDashboard = asyncHandler(async (req, res) => {
@@ -104,6 +108,7 @@ const employeeDashboard = asyncHandler(async (req, res) => {
   const today = { $gte: startOfDay(), $lte: endOfDay() };
 
   const [
+    totalCount,
     todayCount,
     completedCount,
     pendingCount,
@@ -112,8 +117,18 @@ const employeeDashboard = asyncHandler(async (req, res) => {
     weeklyCount,
     monthlyCount,
     recentTasks,
+    recentSheetTasks,
     upcomingDeadlines,
+    sheetTotalCount,
+    sheetCompletedCount,
+    sheetPendingCount,
+    sheetInProgressCount,
+    sheetTodayCount,
+    sheetWeeklyCount,
+    sheetMonthlyCount,
+    sheetProgressStats,
   ] = await Promise.all([
+    countTasks({ assignedTo: userId }),
     countTasks({ assignedTo: userId, taskDate: today }),
     countTasks({ assignedTo: userId, status: 'completed' }),
     countTasks({ assignedTo: userId, status: 'pending' }),
@@ -129,7 +144,11 @@ const employeeDashboard = asyncHandler(async (req, res) => {
       .populate('project', 'name')
       .sort({ createdAt: -1 })
       .limit(5)
-      .select('title project priority status createdAt'),
+      .select('title project priority status createdAt updatedAt'),
+    GoogleSheetTask.find({ assignedTo: userId })
+      .sort({ updatedAt: -1 })
+      .limit(5)
+      .select('data status progress assignedAt updatedAt rowNumber'),
     Task.find({
       assignedTo: userId,
       status: { $in: ['pending', 'in-progress'] },
@@ -138,21 +157,63 @@ const employeeDashboard = asyncHandler(async (req, res) => {
       .sort({ expectedCompletion: 1 })
       .limit(5)
       .select('title expectedCompletion priority'),
+    countSheetTasks({ assignedTo: userId }),
+    countSheetTasks({ assignedTo: userId, status: 'completed' }),
+    countSheetTasks({ assignedTo: userId, status: { $in: pendingSheetStatuses } }),
+    countSheetTasks({ assignedTo: userId, status: 'in-progress' }),
+    countSheetTasks({ assignedTo: userId, assignedAt: today }),
+    countSheetTasks({ assignedTo: userId, assignedAt: { $gte: startOfWeek() } }),
+    countSheetTasks({ assignedTo: userId, assignedAt: { $gte: startOfMonth() } }),
+    GoogleSheetTask.aggregate([
+      { $match: { assignedTo: userId } },
+      { $group: { _id: null, averageProgress: { $avg: '$progress' } } },
+    ]),
   ]);
+
+  const getSheetTaskTitle = (task) => {
+    const entries = task.data instanceof Map ? Array.from(task.data.entries()) : Object.entries(task.data || {});
+    const titleEntry =
+      entries.find(([key]) => /task.?name|title|subject/i.test(key)) ||
+      entries.find(([, value]) => String(value || '').trim());
+
+    return String(titleEntry?.[1] || `Sheet row #${task.rowNumber}`).trim();
+  };
+
+  const combinedRecentTasks = [
+    ...recentTasks.map((task) => task.toObject()),
+    ...recentSheetTasks.map((task) => ({
+      _id: task._id,
+      title: getSheetTaskTitle(task),
+      project: { name: 'Google Sheet Task' },
+      priority: 'medium',
+      status: task.status,
+      progress: task.progress || 0,
+      createdAt: task.assignedAt || task.createdAt,
+      updatedAt: task.updatedAt,
+      source: 'google-sheet',
+    })),
+  ]
+    .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))
+    .slice(0, 5);
+
+  const totalTrackedTasks = totalCount + sheetTotalCount;
+  const sheetAverageProgress = Math.round(sheetProgressStats[0]?.averageProgress || 0);
 
   res.json({
     success: true,
     data: {
       cards: {
-        todayTasks: todayCount,
-        completed: completedCount,
-        pending: pendingCount,
-        inProgress: inProgressCount,
+        todayTasks: todayCount + sheetTodayCount,
+        completed: completedCount + sheetCompletedCount,
+        pending: pendingCount + sheetPendingCount,
+        inProgress: inProgressCount + sheetInProgressCount,
         overdue: overdueCount,
-        weeklySummary: weeklyCount,
-        monthlySummary: monthlyCount,
+        weeklySummary: weeklyCount + sheetWeeklyCount,
+        monthlySummary: monthlyCount + sheetMonthlyCount,
+        totalAssigned: totalTrackedTasks,
+        averageProgress: sheetAverageProgress,
       },
-      recentTasks,
+      recentTasks: combinedRecentTasks,
       upcomingDeadlines,
     },
   });
