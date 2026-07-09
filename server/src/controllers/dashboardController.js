@@ -38,6 +38,15 @@ const REPORT_ACTION_LABELS = {
 
 const pendingSheetStatuses = ['pending', 'assigned'];
 
+const getSheetTaskTitle = (task) => {
+  const entries = task.data instanceof Map ? Array.from(task.data.entries()) : Object.entries(task.data || {});
+  const titleEntry =
+    entries.find(([key]) => /task.?name|title|subject/i.test(key)) ||
+    entries.find(([, value]) => String(value || '').trim());
+
+  return String(titleEntry?.[1] || `Sheet row #${task.rowNumber}`).trim();
+};
+
 // GET /dashboard/admin
 const adminDashboard = asyncHandler(async (req, res) => {
   const today = { $gte: startOfDay(), $lte: endOfDay() };
@@ -46,6 +55,14 @@ const adminDashboard = asyncHandler(async (req, res) => {
     totalEmployees,
     totalDepartments,
     totalTeams,
+    sheetTaskCount,
+    sheetTodayCount,
+    sheetCompletedCount,
+    sheetPendingCount,
+    sheetInProgressCount,
+    sheetWeeklyCount,
+    sheetMonthlyCount,
+    latestSheetTasks,
     todayCount,
     completedCount,
     pendingCount,
@@ -60,6 +77,18 @@ const adminDashboard = asyncHandler(async (req, res) => {
     User.countDocuments({ role: 'employee' }),
     Department.countDocuments(),
     Team.countDocuments(),
+    countSheetTasks({}),
+    countSheetTasks({ createdAt: today }),
+    countSheetTasks({ status: 'completed' }),
+    countSheetTasks({ status: { $in: pendingSheetStatuses } }),
+    countSheetTasks({ status: 'in-progress' }),
+    countSheetTasks({ createdAt: { $gte: startOfWeek() } }),
+    countSheetTasks({ createdAt: { $gte: startOfMonth() } }),
+    GoogleSheetTask.find()
+      .populate('assignedTo', 'name')
+      .sort({ updatedAt: -1 })
+      .limit(5)
+      .select('data status assignedTo rowNumber updatedAt createdAt'),
     countTasks({ taskDate: today }),
     countTasks({ status: 'completed' }),
     countTasks({ status: 'pending' }),
@@ -82,6 +111,19 @@ const adminDashboard = asyncHandler(async (req, res) => {
     createdAt: log.createdAt,
   }));
 
+  const useSheetTasks = sheetTaskCount > 0;
+  const dashboardLatestTasks = useSheetTasks
+    ? latestSheetTasks.map((task) => ({
+        _id: task._id,
+        title: getSheetTaskTitle(task),
+        status: task.status,
+        assignedTo: task.assignedTo || { name: 'Unassigned' },
+        createdAt: task.createdAt,
+        updatedAt: task.updatedAt,
+        source: 'google-sheet',
+      }))
+    : latestTasks;
+
   res.json({
     success: true,
     data: {
@@ -89,15 +131,16 @@ const adminDashboard = asyncHandler(async (req, res) => {
         totalEmployees,
         departments: totalDepartments,
         teams: totalTeams,
-        todayTasks: todayCount,
-        completed: completedCount,
-        pending: pendingCount,
-        inProgress: inProgressCount,
+        todayTasks: useSheetTasks ? sheetTodayCount : todayCount,
+        completed: useSheetTasks ? sheetCompletedCount : completedCount,
+        pending: useSheetTasks ? sheetPendingCount : pendingCount,
+        inProgress: useSheetTasks ? sheetInProgressCount : inProgressCount,
         late: lateCount,
-        weekly: weeklyCount,
-        monthly: monthlyCount,
+        weekly: useSheetTasks ? sheetWeeklyCount : weeklyCount,
+        monthly: useSheetTasks ? sheetMonthlyCount : monthlyCount,
+        totalTasks: useSheetTasks ? sheetTaskCount : completedCount + pendingCount + inProgressCount,
       },
-      recentActivity: { latestTasks, latestLogins, latestReports },
+      recentActivity: { latestTasks: dashboardLatestTasks, latestLogins, latestReports },
     },
   });
 });
@@ -169,15 +212,6 @@ const employeeDashboard = asyncHandler(async (req, res) => {
       { $group: { _id: null, averageProgress: { $avg: '$progress' } } },
     ]),
   ]);
-
-  const getSheetTaskTitle = (task) => {
-    const entries = task.data instanceof Map ? Array.from(task.data.entries()) : Object.entries(task.data || {});
-    const titleEntry =
-      entries.find(([key]) => /task.?name|title|subject/i.test(key)) ||
-      entries.find(([, value]) => String(value || '').trim());
-
-    return String(titleEntry?.[1] || `Sheet row #${task.rowNumber}`).trim();
-  };
 
   const combinedRecentTasks = [
     ...recentTasks.map((task) => task.toObject()),
