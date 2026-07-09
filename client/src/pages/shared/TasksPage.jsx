@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
+
 import { format } from 'date-fns';
 import {
   FiRefreshCw, FiTrash2, FiAlertTriangle, FiLink,
   FiSearch, FiGlobe, FiLock, FiCopy, FiCheckCircle, FiGrid,
-  FiClock, FiUser, FiTag, FiX,
+  FiClock, FiUser, FiTag, FiX, FiSettings,
 } from 'react-icons/fi';
 import {
   PageHeader, Button, Input, ConfirmDialog, Card,
@@ -325,6 +326,118 @@ function TaskDetailModal({ row, headers, onClose }) {
     </div>
   );
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+   ConfigModal — the old always-visible "Tasks Sheet" banner, now opened
+   from a button in the filter row instead of sitting on the page permanently.
+   Includes the Apps Script setup panel for push-mode sheets.
+──────────────────────────────────────────────────────────────────────────── */
+function ConfigModal({
+  config,
+  isPushMode,
+  isSuperAdmin,
+  onClose,
+  onSync,
+  isSyncing,
+  onDisconnect,
+  appsScriptCode,
+  onCopy,
+  copied,
+}) {
+  if (!config) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-[1px] px-4" onClick={onClose}>
+      <div
+        className="w-full max-w-2xl max-h-[85vh] overflow-y-auto hide-scrollbar rounded-2xl bg-white dark:bg-slate-800 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100 dark:border-slate-700 px-6 py-5">
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100 leading-snug">Sheet Configuration</h2>
+          <button
+            onClick={onClose}
+            className="flex-shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 transition-colors"
+          >
+            <FiX className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 flex flex-col gap-5">
+          {/* ──────────── CONFIG BANNER (moved as-is from the page body) ──────────── */}
+          <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="flex items-center flex-wrap gap-2">
+                <h3 className="font-semibold text-slate-800 dark:text-slate-100">{config.name}</h3>
+                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${isPushMode
+                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                  : config.syncError
+                    ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                    : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+                  }`}>
+                  {isPushMode ? 'Private (Apps Script)' : config.syncError ? 'Sync Failed' : 'Active Sync'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-1 break-all max-w-lg">{config.url}</p>
+              {config.lastSyncedAt && (
+                <p className="text-xs text-slate-500 mt-1.5">
+                  Last synced:{' '}
+                  <span className="font-medium text-slate-700 dark:text-slate-200">
+                    {format(new Date(config.lastSyncedAt), 'MMM d, yyyy HH:mm:ss')}
+                  </span>
+                </p>
+              )}
+              {!isPushMode && config.syncError && (
+                <p className="flex items-center gap-1 text-xs text-red-500 mt-1">
+                  <FiAlertTriangle className="h-3.5 w-3.5" />{config.syncError}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {!isPushMode && (
+                <Button variant="outline" icon={FiRefreshCw} onClick={onSync} isLoading={isSyncing}>
+                  Sync Now
+                </Button>
+              )}
+              {isSuperAdmin && (
+                <Button variant="danger" icon={FiTrash2} onClick={onDisconnect}>
+                  Disconnect
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* ──────────── APPS SCRIPT PANEL (push only) ──────────── */}
+          {isPushMode && (
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/20 p-5">
+              <div className="flex items-start gap-3">
+                <FiLock className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-sm font-semibold text-blue-800 dark:text-blue-200">Setup Google Apps Script for automatic sync</h4>
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                    Copy the code below → open your Sheet → <strong>Extensions → Apps Script</strong> → paste → Run once → set a trigger for <strong>On change</strong>.
+                  </p>
+                  <div className="mt-3 rounded-xl bg-slate-900 text-slate-100 text-xs overflow-auto">
+                    <div className="flex items-center justify-between px-4 py-2 border-b border-slate-700">
+                      <span className="text-slate-400 font-medium">Apps Script Code</span>
+                      <button onClick={onCopy} className="flex items-center gap-1.5 text-slate-400 hover:text-slate-200 transition-colors">
+                        {copied
+                          ? <><FiCheckCircle className="h-3.5 w-3.5 text-green-400" /> Copied!</>
+                          : <><FiCopy className="h-3.5 w-3.5" /> Copy</>}
+                      </button>
+                    </div>
+                    <pre className="p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed">{appsScriptCode}</pre>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ────────────────────────────────────────────────────────────────────────────
    Main page component
 ──────────────────────────────────────────────────────────────────────────── */
@@ -344,6 +457,7 @@ export default function TasksPage() {
   const [employeeFilter, setEmployeeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [assigningTaskId, setAssigningTaskId] = useState('');
+  const [showConfigModal, setShowConfigModal] = useState(false);
 
   const rawApiUrl = import.meta.env.VITE_API_URL || '/api';
   const apiBase = rawApiUrl.replace(/\/api$/, '');
@@ -425,7 +539,7 @@ export default function TasksPage() {
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteGoogleSheet(config?._id),
-    onSuccess: () => { toast.success('Sheet unlinked'); setDisconnectConfirm(false); invalidateAll(); },
+    onSuccess: () => { toast.success('Sheet unlinked'); setDisconnectConfirm(false); setShowConfigModal(false); invalidateAll(); },
     onError: (err) => toast.error(err.response?.data?.message || 'Failed to unlink'),
   });
 
@@ -540,75 +654,6 @@ export default function TasksPage() {
         </Card>
       ) : (
         <>
-          {/* ──────────── CONFIG BANNER ──────────── */}
-          <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <div className="flex items-center flex-wrap gap-2">
-                <h3 className="font-semibold text-slate-800 dark:text-slate-100">{config.name}</h3>
-                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${isPushMode
-                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
-                  : config.syncError
-                    ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-                    : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
-                  }`}>
-                  {isPushMode ? 'Private (Apps Script)' : config.syncError ? 'Sync Failed' : 'Active Sync'}
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 mt-1 break-all max-w-lg">{config.url}</p>
-              {config.lastSyncedAt && (
-                <p className="text-xs text-slate-500 mt-1.5">
-                  Last synced:{' '}
-                  <span className="font-medium text-slate-700 dark:text-slate-200">
-                    {format(new Date(config.lastSyncedAt), 'MMM d, yyyy HH:mm:ss')}
-                  </span>
-                </p>
-              )}
-              {!isPushMode && config.syncError && (
-                <p className="flex items-center gap-1 text-xs text-red-500 mt-1">
-                  <FiAlertTriangle className="h-3.5 w-3.5" />{config.syncError}
-                </p>
-              )}
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              {!isPushMode && (
-                <Button variant="outline" icon={FiRefreshCw} onClick={() => syncMutation.mutate()} isLoading={syncMutation.isPending || tasksFetching}>
-                  Sync Now
-                </Button>
-              )}
-              {isSuperAdmin && (
-                <Button variant="danger" icon={FiTrash2} onClick={() => setDisconnectConfirm(true)}>
-                  Disconnect
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {/* ──────────── APPS SCRIPT PANEL (push only) ──────────── */}
-          {isPushMode && (
-            <div className="rounded-2xl border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/20 p-5">
-              <div className="flex items-start gap-3">
-                <FiLock className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-sm font-semibold text-blue-800 dark:text-blue-200">Setup Google Apps Script for automatic sync</h4>
-                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-                    Copy the code below → open your Sheet → <strong>Extensions → Apps Script</strong> → paste → Run once → set a trigger for <strong>On change</strong>.
-                  </p>
-                  <div className="mt-3 rounded-xl bg-slate-900 text-slate-100 text-xs overflow-auto">
-                    <div className="flex items-center justify-between px-4 py-2 border-b border-slate-700">
-                      <span className="text-slate-400 font-medium">Apps Script Code</span>
-                      <button onClick={handleCopy} className="flex items-center gap-1.5 text-slate-400 hover:text-slate-200 transition-colors">
-                        {copied
-                          ? <><FiCheckCircle className="h-3.5 w-3.5 text-green-400" /> Copied!</>
-                          : <><FiCopy className="h-3.5 w-3.5" /> Copy</>}
-                      </button>
-                    </div>
-                    <pre className="p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed">{appsScriptCode}</pre>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* ──────────── SEARCH BAR ──────────── */}
           <div className="flex items-center gap-3 flex-wrap">
             <Input
@@ -646,6 +691,16 @@ export default function TasksPage() {
                 />
               </>
             )}
+            <Button
+              variant="outline"
+              icon={FiSettings}
+              onClick={() => setShowConfigModal(true)}
+            >
+              {config.name}
+              {!isPushMode && config.syncError && (
+                <FiAlertTriangle className="h-3.5 w-3.5 text-red-500 ml-1.5" />
+              )}
+            </Button>
             {(tasksFetching || availableFetching) && (
               <div className="flex items-center gap-1.5 text-xs text-slate-400">
                 <FiRefreshCw className="h-3.5 w-3.5 animate-spin" />
@@ -750,6 +805,21 @@ export default function TasksPage() {
           row={selectedRow}
           headers={config?.headers || []}
           onClose={() => setSelectedRow(null)}
+        />
+      )}
+
+      {showConfigModal && config && (
+        <ConfigModal
+          config={config}
+          isPushMode={isPushMode}
+          isSuperAdmin={isSuperAdmin}
+          onClose={() => setShowConfigModal(false)}
+          onSync={() => syncMutation.mutate()}
+          isSyncing={syncMutation.isPending || tasksFetching}
+          onDisconnect={() => setDisconnectConfirm(true)}
+          appsScriptCode={appsScriptCode}
+          onCopy={handleCopy}
+          copied={copied}
         />
       )}
 
