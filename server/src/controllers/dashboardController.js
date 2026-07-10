@@ -37,6 +37,14 @@ const REPORT_ACTION_LABELS = {
 };
 
 const pendingSheetStatuses = ['pending', 'assigned'];
+const pendingManualStatuses = ['pending', 'hold'];
+
+const manualProgressFromStatus = (status) => {
+  if (status === 'completed') return 100;
+  if (status === 'in-progress') return 50;
+  if (status === 'hold') return 25;
+  return 0;
+};
 
 const getSheetTaskTitle = (task) => {
   const entries = task.data instanceof Map ? Array.from(task.data.entries()) : Object.entries(task.data || {});
@@ -111,34 +119,47 @@ const adminDashboard = asyncHandler(async (req, res) => {
     createdAt: log.createdAt,
   }));
 
-  const useSheetTasks = sheetTaskCount > 0;
-  const dashboardLatestTasks = useSheetTasks
-    ? latestSheetTasks.map((task) => ({
-        _id: task._id,
-        title: getSheetTaskTitle(task),
-        status: task.status,
-        assignedTo: task.assignedTo || { name: 'Unassigned' },
-        createdAt: task.createdAt,
-        updatedAt: task.updatedAt,
-        source: 'google-sheet',
-      }))
-    : latestTasks;
+  const manualTaskCount = completedCount + pendingCount + inProgressCount;
+
+  const dashboardLatestTasks = [
+    ...latestSheetTasks.map((task) => ({
+      _id: task._id,
+      title: getSheetTaskTitle(task),
+      status: task.status,
+      assignedTo: task.assignedTo || { name: 'Unassigned' },
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+      source: 'google-sheet',
+    })),
+    ...latestTasks.map((task) => ({
+      _id: task._id,
+      title: task.title,
+      status: task.status,
+      assignedTo: task.assignedTo || { name: 'Unassigned' },
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt || task.createdAt,
+      source: 'manual',
+    })),
+  ]
+    .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))
+    .slice(0, 5);
 
   res.json({
     success: true,
     data: {
+      includesSheetTasks: sheetTaskCount > 0,
       cards: {
         totalEmployees,
         departments: totalDepartments,
         teams: totalTeams,
-        todayTasks: useSheetTasks ? sheetTodayCount : todayCount,
-        completed: useSheetTasks ? sheetCompletedCount : completedCount,
-        pending: useSheetTasks ? sheetPendingCount : pendingCount,
-        inProgress: useSheetTasks ? sheetInProgressCount : inProgressCount,
+        todayTasks: sheetTodayCount + todayCount,
+        completed: sheetCompletedCount + completedCount,
+        pending: sheetPendingCount + pendingCount,
+        inProgress: sheetInProgressCount + inProgressCount,
         late: lateCount,
-        weekly: useSheetTasks ? sheetWeeklyCount : weeklyCount,
-        monthly: useSheetTasks ? sheetMonthlyCount : monthlyCount,
-        totalTasks: useSheetTasks ? sheetTaskCount : completedCount + pendingCount + inProgressCount,
+        weekly: sheetWeeklyCount + weeklyCount,
+        monthly: sheetMonthlyCount + monthlyCount,
+        totalTasks: sheetTaskCount + manualTaskCount,
       },
       recentActivity: { latestTasks: dashboardLatestTasks, latestLogins, latestReports },
     },
@@ -149,6 +170,8 @@ const adminDashboard = asyncHandler(async (req, res) => {
 const employeeDashboard = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const today = { $gte: startOfDay(), $lte: endOfDay() };
+  const manualFilter = { assignedTo: userId, isArchived: { $ne: true } };
+  const sheetFilter = { assignedTo: userId };
 
   const [
     totalCount,
@@ -170,51 +193,59 @@ const employeeDashboard = asyncHandler(async (req, res) => {
     sheetWeeklyCount,
     sheetMonthlyCount,
     sheetProgressStats,
+    allManualTasks,
+    allSheetTasks,
   ] = await Promise.all([
-    countTasks({ assignedTo: userId }),
-    countTasks({ assignedTo: userId, taskDate: today }),
-    countTasks({ assignedTo: userId, status: 'completed' }),
-    countTasks({ assignedTo: userId, status: 'pending' }),
-    countTasks({ assignedTo: userId, status: 'in-progress' }),
+    countTasks(manualFilter),
+    countTasks({ ...manualFilter, taskDate: today }),
+    countTasks({ ...manualFilter, status: 'completed' }),
+    countTasks({ ...manualFilter, status: { $in: pendingManualStatuses } }),
+    countTasks({ ...manualFilter, status: 'in-progress' }),
     countTasks({
-      assignedTo: userId,
+      ...manualFilter,
       status: { $in: ['pending', 'in-progress'] },
       expectedCompletion: { $lt: new Date() },
     }),
-    countTasks({ assignedTo: userId, taskDate: { $gte: startOfWeek() } }),
-    countTasks({ assignedTo: userId, taskDate: { $gte: startOfMonth() } }),
-    Task.find({ assignedTo: userId })
+    countTasks({ ...manualFilter, taskDate: { $gte: startOfWeek() } }),
+    countTasks({ ...manualFilter, taskDate: { $gte: startOfMonth() } }),
+    Task.find(manualFilter)
       .populate('project', 'name')
-      .sort({ createdAt: -1 })
+      .sort({ updatedAt: -1 })
       .limit(5)
       .select('title project priority status createdAt updatedAt'),
-    GoogleSheetTask.find({ assignedTo: userId })
+    GoogleSheetTask.find(sheetFilter)
       .sort({ updatedAt: -1 })
       .limit(5)
       .select('data status progress assignedAt updatedAt rowNumber'),
     Task.find({
-      assignedTo: userId,
+      ...manualFilter,
       status: { $in: ['pending', 'in-progress'] },
       expectedCompletion: { $gte: new Date() },
     })
       .sort({ expectedCompletion: 1 })
       .limit(5)
       .select('title expectedCompletion priority'),
-    countSheetTasks({ assignedTo: userId }),
-    countSheetTasks({ assignedTo: userId, status: 'completed' }),
-    countSheetTasks({ assignedTo: userId, status: { $in: pendingSheetStatuses } }),
-    countSheetTasks({ assignedTo: userId, status: 'in-progress' }),
-    countSheetTasks({ assignedTo: userId, assignedAt: today }),
-    countSheetTasks({ assignedTo: userId, assignedAt: { $gte: startOfWeek() } }),
-    countSheetTasks({ assignedTo: userId, assignedAt: { $gte: startOfMonth() } }),
+    countSheetTasks(sheetFilter),
+    countSheetTasks({ ...sheetFilter, status: 'completed' }),
+    countSheetTasks({ ...sheetFilter, status: { $in: pendingSheetStatuses } }),
+    countSheetTasks({ ...sheetFilter, status: 'in-progress' }),
+    countSheetTasks({ ...sheetFilter, assignedAt: today }),
+    countSheetTasks({ ...sheetFilter, assignedAt: { $gte: startOfWeek() } }),
+    countSheetTasks({ ...sheetFilter, assignedAt: { $gte: startOfMonth() } }),
     GoogleSheetTask.aggregate([
-      { $match: { assignedTo: userId } },
+      { $match: sheetFilter },
       { $group: { _id: null, averageProgress: { $avg: '$progress' } } },
     ]),
+    Task.find(manualFilter).select('status'),
+    GoogleSheetTask.find(sheetFilter).select('progress'),
   ]);
 
   const combinedRecentTasks = [
-    ...recentTasks.map((task) => task.toObject()),
+    ...recentTasks.map((task) => ({
+      ...task.toObject(),
+      source: 'manual',
+      project: task.project || { name: 'My Task' },
+    })),
     ...recentSheetTasks.map((task) => ({
       _id: task._id,
       title: getSheetTaskTitle(task),
@@ -231,11 +262,20 @@ const employeeDashboard = asyncHandler(async (req, res) => {
     .slice(0, 5);
 
   const totalTrackedTasks = totalCount + sheetTotalCount;
-  const sheetAverageProgress = Math.round(sheetProgressStats[0]?.averageProgress || 0);
+
+  const manualProgressTotal = allManualTasks.reduce(
+    (sum, task) => sum + manualProgressFromStatus(task.status),
+    0
+  );
+  const sheetProgressTotal = allSheetTasks.reduce((sum, task) => sum + (Number(task.progress) || 0), 0);
+  const averageProgress = totalTrackedTasks
+    ? Math.round((manualProgressTotal + sheetProgressTotal) / totalTrackedTasks)
+    : 0;
 
   res.json({
     success: true,
     data: {
+      includesSheetTasks: sheetTotalCount > 0,
       cards: {
         todayTasks: todayCount + sheetTodayCount,
         completed: completedCount + sheetCompletedCount,
@@ -245,7 +285,9 @@ const employeeDashboard = asyncHandler(async (req, res) => {
         weeklySummary: weeklyCount + sheetWeeklyCount,
         monthlySummary: monthlyCount + sheetMonthlyCount,
         totalAssigned: totalTrackedTasks,
-        averageProgress: sheetAverageProgress,
+        sheetAssigned: sheetTotalCount,
+        myTasks: totalCount,
+        averageProgress,
       },
       recentTasks: combinedRecentTasks,
       upcomingDeadlines,

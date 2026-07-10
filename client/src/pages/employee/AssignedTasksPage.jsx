@@ -3,10 +3,51 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { FiRefreshCw, FiSearch, FiCheckSquare } from 'react-icons/fi';
 import { getGoogleSheets, getGoogleSheetTasks, updateGoogleSheetTaskProgress } from '../../api/googleSheets';
+import { getTasks, setTaskStatus } from '../../api/tasks';
+import { useAuth } from '../../hooks/useAuth';
 import { Input, PageHeader } from '../../components/ui';
 import AssignedTasksTable from '../shared/AssignedTasksTable';
 
+const manualProgressFromStatus = (status) => {
+  if (status === 'completed') return 100;
+  if (status === 'in-progress') return 50;
+  if (status === 'hold') return 25;
+  return 0;
+};
+
+const sheetStatusFromManual = (status) => {
+  if (status === 'pending' || status === 'hold') return 'assigned';
+  return status;
+};
+
+const manualStatusFromSheet = (status) => {
+  if (status === 'assigned') return 'pending';
+  return status;
+};
+
+const mapManualTaskToAssignedRow = (task, headers, currentUser) => {
+  const titleKey =
+    headers.find((header) => /task.?name|title|subject/i.test(header)) ||
+    headers[1] ||
+    headers[0] ||
+    'Task Name';
+
+  return {
+    _id: task._id,
+    data: { [titleKey]: task.title },
+    rowNumber: 'Mine',
+    assignedAt: task.createdAt,
+    assignedBy: currentUser,
+    assignmentSource: 'employee',
+    status: sheetStatusFromManual(task.status),
+    progress: manualProgressFromStatus(task.status),
+    updatedAt: task.updatedAt,
+    _isManual: true,
+  };
+};
+
 export default function AssignedTasksPage() {
+  const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [updatingTaskId, setUpdatingTaskId] = useState('');
   const queryClient = useQueryClient();
@@ -17,8 +58,9 @@ export default function AssignedTasksPage() {
   });
 
   const config = configsRes?.data?.data?.[0] || null;
+  const headers = config?.headers || [];
 
-  const { data: tasksRes, isLoading, isFetching } = useQuery({
+  const { data: tasksRes, isLoading: sheetLoading, isFetching: sheetFetching } = useQuery({
     queryKey: ['google-sheets-tasks', 'employee-assigned-page', config?._id, search],
     queryFn: () => getGoogleSheetTasks(config?._id, {
       page: 1,
@@ -30,22 +72,63 @@ export default function AssignedTasksPage() {
     refetchInterval: 10000,
   });
 
-  const tasks = tasksRes?.data?.data || [];
+  const { data: manualTasksRes, isLoading: manualLoading, isFetching: manualFetching } = useQuery({
+    queryKey: ['my-tasks', 'assigned-page', search],
+    queryFn: () => getTasks({
+      page: 1,
+      limit: 500,
+      search: search || undefined,
+      sortBy: 'updatedAt',
+      sortOrder: 'desc',
+    }),
+    refetchInterval: 10000,
+  });
 
-  const updateProgressMutation = useMutation({
+  const sheetTasks = tasksRes?.data?.data || [];
+  const manualTasks = manualTasksRes?.data?.data || [];
+  const manualRows = manualTasks.map((task) => mapManualTaskToAssignedRow(task, headers, user));
+  const tasks = [...manualRows, ...sheetTasks];
+  const isLoading = sheetLoading || manualLoading;
+  const isFetching = sheetFetching || manualFetching;
+
+  const invalidateAssigned = () => {
+    queryClient.invalidateQueries({ queryKey: ['google-sheets-tasks'] });
+    queryClient.invalidateQueries({ queryKey: ['my-tasks'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard', 'employee'] });
+  };
+
+  const updateSheetProgressMutation = useMutation({
     mutationFn: ({ taskId, payload }) => updateGoogleSheetTaskProgress(taskId, payload),
     onMutate: ({ taskId }) => setUpdatingTaskId(taskId),
     onSuccess: () => {
       toast.success('Task progress updated');
-      queryClient.invalidateQueries({ queryKey: ['google-sheets-tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard', 'employee'] });
+      invalidateAssigned();
     },
     onError: (err) => toast.error(err.response?.data?.message || 'Failed to update task progress'),
     onSettled: () => setUpdatingTaskId(''),
   });
 
+  const updateManualStatusMutation = useMutation({
+    mutationFn: ({ taskId, status }) => setTaskStatus(taskId, status),
+    onMutate: ({ taskId }) => setUpdatingTaskId(taskId),
+    onSuccess: () => {
+      toast.success('Task updated');
+      invalidateAssigned();
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Failed to update task'),
+    onSettled: () => setUpdatingTaskId(''),
+  });
+
   const handleUpdateProgress = (taskId, payload) => {
-    updateProgressMutation.mutate({ taskId, payload });
+    const task = tasks.find((item) => item._id === taskId);
+    if (task?._isManual) {
+      updateManualStatusMutation.mutate({
+        taskId,
+        status: manualStatusFromSheet(payload.status),
+      });
+      return;
+    }
+    updateSheetProgressMutation.mutate({ taskId, payload });
   };
 
   if (configLoading) {
@@ -58,7 +141,7 @@ export default function AssignedTasksPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="My Assigned Tasks" subtitle="Tasks assigned to you by admin or claimed by you" />
+      <PageHeader title="My Assigned Tasks" subtitle="Sheet tasks assigned to you and tasks you created" />
 
       {!config ? (
         <div className="rounded-2xl border border-dashed border-slate-200 py-16 text-center dark:border-slate-700">
@@ -83,6 +166,9 @@ export default function AssignedTasksPage() {
             )}
             <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">
               {tasks.length} assigned task{tasks.length !== 1 ? 's' : ''}
+              {manualRows.length > 0 && sheetTasks.length > 0 && (
+                <span className="text-slate-400"> · {manualRows.length} mine · {sheetTasks.length} sheet</span>
+              )}
             </span>
           </div>
 
@@ -100,7 +186,7 @@ export default function AssignedTasksPage() {
           ) : (
             <AssignedTasksTable
               tasks={tasks}
-              headers={config.headers || []}
+              headers={headers}
               showEmployee={false}
               onUpdateProgress={handleUpdateProgress}
               updatingTaskId={updatingTaskId}

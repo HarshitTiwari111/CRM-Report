@@ -7,6 +7,7 @@ import {
   FiRefreshCw, FiTrash2, FiAlertTriangle, FiLink,
   FiSearch, FiGlobe, FiLock, FiCopy, FiCheckCircle, FiGrid,
   FiClock, FiUser, FiTag, FiX, FiSettings,
+  FiPlus, FiEdit2,
 } from 'react-icons/fi';
 import {
   PageHeader, Button, Input, ConfirmDialog, Card,
@@ -19,6 +20,7 @@ import {
   selfAssignGoogleSheetTask, assignGoogleSheetTask,
 } from '../../api/googleSheets';
 import { getUsers } from '../../api/users';
+import { getTasks, createTask, updateTask, deleteTask } from '../../api/tasks';
 
 /* ────────────────────────────────────────────────────────────────────────────
    Helpers
@@ -53,6 +55,83 @@ const HIDE_SCROLLBAR_CSS = `
 ──────────────────────────────────────────────────────────────────────────── */
 const buildAppsScript = (apiBase) =>
   `function syncTasksToCRM() {\n  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();\n  var rows = sheet.getDataRange().getValues();\n  var crmUrl = "${apiBase}/api/google-sheets/webhook-sync";\n  var payload = JSON.stringify({\n    url: SpreadsheetApp.getActiveSpreadsheet().getUrl(),\n    rows: rows\n  });\n  var options = {\n    method: "post",\n    contentType: "application/json",\n    payload: payload,\n    muteHttpExceptions: true\n  };\n  var response = UrlFetchApp.fetch(crmUrl, options);\n  Logger.log("Response: " + response.getContentText());\n}`;
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Manual-task <-> sheet-row mapping
+   Employee ke "Add Task" se banaye gaye tasks ko Google Sheet wale rows jaisa
+   hi shape (row.data[header]) diya jata hai, taaki dono EK hi TaskTable me
+   render ho sakein — alag card/list nahi banani padti.
+
+   Extra (non-native) fields jaise "Who Currently Does This?", "How Often?",
+   "Tools / Platforms Used", "Vertical / Department", "working developer" ko
+   Task model ke already-existing `notes` field ke andar ek chhota JSON object
+   banake store kiya jata hai — isse backend/model me koi change nahi karna
+   padta.
+──────────────────────────────────────────────────────────────────────────── */
+const EXTRA_FIELD_HEADERS = [
+  'Vertical / Department',
+  'Who Currently Does This?',
+  'How Often?',
+  'Time Per Occurrence',
+  'Tools / Platforms Used',
+  'working developer',
+];
+
+const DEFAULT_SHEET_HEADERS = [
+  'Timestamp',
+  'Your Name',
+  'Task Name',
+  ...EXTRA_FIELD_HEADERS,
+  'Step-by-Step Process',
+  'Pain Level',
+  'Current Task Status',
+  'Additional Notes / Edge Cases',
+];
+
+const resolveHeaders = (configHeaders) =>
+  configHeaders?.length ? configHeaders : DEFAULT_SHEET_HEADERS;
+
+const parseExtraNotes = (notes) => {
+  if (!notes) return {};
+  try {
+    const parsed = JSON.parse(notes);
+    return typeof parsed === 'object' && parsed !== null ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+// Task (mongoose doc) → same { _id, data, status, progress, assignedTo } shape as a Google Sheet row
+const mapManualTaskToRow = (task, headers, currentUserName) => {
+  const extra = parseExtraNotes(task.notes);
+  const data = {};
+
+  headers.forEach((h) => {
+    if (/task.?name|title|subject/i.test(h)) data[h] = task.title || '';
+    else if (/timestamp/i.test(h)) data[h] = task.taskDate || task.createdAt || '';
+    else if (/^your name$/i.test(h)) data[h] = currentUserName || '';
+    else if (/step-by-step|process/i.test(h)) data[h] = task.description || '';
+    else if (/pain level/i.test(h)) data[h] = task.priority || '';
+    else if (/additional notes|edge case/i.test(h)) data[h] = task.remarks || '';
+    else if (/^status$/i.test(h)) data[h] = task.status || 'pending';
+    else data[h] = extra[h] || '';
+  });
+
+  const progress = task.status === 'completed' ? 100
+    : task.status === 'in-progress' ? 50
+      : task.status === 'hold' ? 25
+        : 0;
+
+  return {
+    _id: task._id,
+    data,
+    status: task.status || 'pending',
+    progress,
+    assignedTo: task.assignedTo,
+    _source: 'manual',
+    _raw: task,
+  };
+};
 
 /* ────────────────────────────────────────────────────────────────────────────
    Small presentational bits shared by table + detail panel
@@ -108,7 +187,9 @@ const formatIfDate = (header, value) => {
 };
 
 /* ────────────────────────────────────────────────────────────────────────────
-   TaskTable — replaces the card grid
+   TaskTable — single shared table for Google Sheet rows AND manual (employee-
+   added) rows. Manual rows are tagged with _source === 'manual' and get
+   Edit/Delete icons in the "Task Assign" column instead of the assign button.
 ──────────────────────────────────────────────────────────────────────────── */
 function TaskTable({
   rows,
@@ -121,6 +202,9 @@ function TaskTable({
   onAdminAssign,
   assigningTaskId,
   section = 'all',
+  onEditManual,
+  onDeleteManual,
+  onAdminManualAssign,
 }) {
   const titleKey =
     headers.find((h) => /task.?name|title|subject/i.test(h)) ||
@@ -161,6 +245,7 @@ function TaskTable({
               const data = row.data || {};
               const title = String(data[titleKey] || 'Untitled Task').trim();
               const isActive = activeRowId === row._id;
+              const isManual = row._source === 'manual';
               const rowBg = isActive
                 ? 'bg-primary-50 dark:bg-primary-900/20'
                 : 'bg-white dark:bg-slate-800 group-hover:bg-slate-50 dark:group-hover:bg-slate-700/30';
@@ -175,7 +260,14 @@ function TaskTable({
                       otherwise the horizontally-scrolling columns behind it show through
                       and overlap the title text while scrolling. */}
                   <td className={`sticky left-0 z-10 px-4 py-3 font-medium text-slate-800 dark:text-slate-100 max-w-[280px] transition-colors ${rowBg}`}>
-                    <div className="overflow-x-auto hide-scrollbar whitespace-nowrap">{title}</div>
+                    <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar whitespace-nowrap">
+                      {title}
+                      {isManual && (
+                        <span className="flex-shrink-0 rounded-full bg-primary-100 dark:bg-primary-900/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary-600 dark:text-primary-300">
+                          Mine
+                        </span>
+                      )}
+                    </div>
                   </td>
                   {otherHeaders.map((h) => {
                     const raw = String(data[h] || '').trim();
@@ -202,10 +294,34 @@ function TaskTable({
                     <ProgressMini value={row.progress} />
                   </td>
                   <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                    {isAdmin ? (
+                    {isManual && !isAdmin ? (
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-flex items-center rounded-full bg-primary-100 px-2.5 py-1 text-xs font-medium text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">
+                          Yours
+                        </span>
+                        <button
+                          onClick={() => onEditManual(row._raw)}
+                          className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-primary-600 dark:hover:bg-slate-700 transition-colors"
+                          title="Edit task"
+                        >
+                          <FiEdit2 className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => onDeleteManual(row._raw)}
+                          className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30 transition-colors"
+                          title="Delete task"
+                        >
+                          <FiTrash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ) : isAdmin ? (
                       <Select
-                        value={row.assignedTo?._id || ''}
-                        onChange={(e) => onAdminAssign(row._id, e.target.value)}
+                        value={row.assignedTo?._id || row.assignedTo || ''}
+                        onChange={(e) =>
+                          isManual
+                            ? onAdminManualAssign(row._id, e.target.value)
+                            : onAdminAssign(row._id, e.target.value)
+                        }
                         disabled={assigningTaskId === row._id}
                         placeholder="Assign employee"
                         className="min-w-[170px]"
@@ -313,15 +429,151 @@ function TaskDetailModal({ row, headers, onClose }) {
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500 w-32 flex-shrink-0">
                   {h}
                 </span>
-                <span className={`text-sm break-words overflow-x-auto hide-scrollbar whitespace-nowrap ${
-                  value ? 'text-slate-700 dark:text-slate-200' : 'text-slate-300 dark:text-slate-600'
-                }`}>
+                <span className={`text-sm break-words overflow-x-auto hide-scrollbar whitespace-nowrap ${value ? 'text-slate-700 dark:text-slate-200' : 'text-slate-300 dark:text-slate-600'
+                  }`}>
                   {value ? formatIfDate(h, raw) : '—'}
                 </span>
               </div>
             );
           })}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   TaskFormModal — employee ke apne task add/edit karne ke liye.
+   Fields yahan Google Sheet ke headers se hi naam liye gaye hain, taaki jo
+   row table me bane vo baaki rows jaisi hi dikhe.
+──────────────────────────────────────────────────────────────────────────── */
+function TaskFormModal({ task, onClose, onSubmit, isLoading }) {
+  const isEdit = Boolean(task);
+  const extra = parseExtraNotes(task?.notes);
+
+  const [form, setForm] = useState({
+    title: task?.title || '',
+    description: task?.description || '',
+    priority: task?.priority || 'medium',
+    status: task?.status || 'pending',
+    taskDate: task?.taskDate ? format(new Date(task.taskDate), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
+    remarks: task?.remarks || '',
+    department: extra['Vertical / Department'] || '',
+    whoDoes: extra['Who Currently Does This?'] || '',
+    howOften: extra['How Often?'] || '',
+    timePerOccurrence: extra['Time Per Occurrence'] || '',
+    tools: extra['Tools / Platforms Used'] || '',
+    workingDeveloper: extra['working developer'] || '',
+  });
+
+  const handleChange = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!form.title.trim()) { toast.error('Task title is required'); return; }
+
+    const extraNotes = {
+      'Vertical / Department': form.department,
+      'Who Currently Does This?': form.whoDoes,
+      'How Often?': form.howOften,
+      'Time Per Occurrence': form.timePerOccurrence,
+      'Tools / Platforms Used': form.tools,
+      'working developer': form.workingDeveloper,
+    };
+
+    const fd = new FormData();
+    fd.append('title', form.title);
+    fd.append('description', form.description);
+    fd.append('priority', form.priority);
+    fd.append('status', form.status);
+    fd.append('taskDate', form.taskDate);
+    fd.append('remarks', form.remarks);
+    fd.append('notes', JSON.stringify(extraNotes));
+
+    onSubmit(fd);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-[1px] px-4" onClick={onClose}>
+      <div
+        className="w-full max-w-lg rounded-2xl bg-white dark:bg-slate-800 shadow-2xl max-h-[90vh] overflow-y-auto hide-scrollbar"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 px-6 py-4">
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
+            {isEdit ? 'Edit Task' : 'Add New Task'}
+          </h2>
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 transition-colors"
+          >
+            <FiX className="h-5 w-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="px-6 py-5 flex flex-col gap-4">
+          <Input label="Task Name" name="title" value={form.title} onChange={handleChange} required />
+
+          <Input label="Vertical / Department" name="department" value={form.department} onChange={handleChange} placeholder="e.g. Sales, Support, Engineering" />
+
+          <div>
+            <label className="text-sm font-medium text-slate-700 dark:text-slate-300 block mb-1.5">Step-by-Step Process</label>
+            <textarea
+              name="description"
+              value={form.description}
+              onChange={handleChange}
+              rows={3}
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-400"
+              placeholder="Task ko step-by-step describe karein..."
+            />
+          </div>
+
+          <Input label="Who Currently Does This?" name="whoDoes" value={form.whoDoes} onChange={handleChange} />
+
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="How Often?" name="howOften" value={form.howOften} onChange={handleChange} placeholder="e.g. Daily" />
+            <Input label="Time Per Occurrence" name="timePerOccurrence" value={form.timePerOccurrence} onChange={handleChange} placeholder="e.g. 30 mins" />
+          </div>
+
+          <Input label="Tools / Platforms Used" name="tools" value={form.tools} onChange={handleChange} />
+          <Input label="Working Developer" name="workingDeveloper" value={form.workingDeveloper} onChange={handleChange} />
+
+          <div className="grid grid-cols-2 gap-3">
+            <Select
+              label="Pain Level"
+              value={form.priority}
+              onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}
+              options={[
+                { value: 'low', label: 'Low' },
+                { value: 'medium', label: 'Medium' },
+                { value: 'high', label: 'High' },
+                { value: 'urgent', label: 'Urgent' },
+              ]}
+            />
+            <Select
+              label="Current Task Status"
+              value={form.status}
+              onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+              options={[
+                { value: 'pending', label: 'Pending' },
+                { value: 'in-progress', label: 'In Progress' },
+                { value: 'completed', label: 'Completed' },
+                { value: 'hold', label: 'Hold' },
+                { value: 'cancelled', label: 'Cancelled' },
+              ]}
+            />
+          </div>
+
+          <Input label="Timestamp" name="taskDate" type="date" value={form.taskDate} onChange={handleChange} />
+          <Input label="Additional Notes / Edge Cases" name="remarks" value={form.remarks} onChange={handleChange} />
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+            <Button type="submit" isLoading={isLoading}>
+              {isEdit ? 'Save Changes' : 'Create Task'}
+            </Button>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -442,11 +694,12 @@ function ConfigModal({
    Main page component
 ──────────────────────────────────────────────────────────────────────────── */
 export default function TasksPage() {
-  const { isSuperAdmin, isEmployee } = useAuth();
+  const { isSuperAdmin, isEmployee, user } = useAuth();
   const queryClient = useQueryClient();
 
   const [page, setPage] = useState(1);
   const LIMIT = 20;
+  const ADMIN_FETCH_LIMIT = 500;
   const [search, setSearch] = useState('');
   const [sheetUrl, setSheetUrl] = useState('');
   const [sheetName, setSheetName] = useState('');
@@ -458,6 +711,8 @@ export default function TasksPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [assigningTaskId, setAssigningTaskId] = useState('');
   const [showConfigModal, setShowConfigModal] = useState(false);
+  const [taskModal, setTaskModal] = useState(null); // null | 'create' | taskDoc (edit)
+  const [deleteTaskTarget, setDeleteTaskTarget] = useState(null);
 
   const rawApiUrl = import.meta.env.VITE_API_URL || '/api';
   const apiBase = rawApiUrl.replace(/\/api$/, '');
@@ -477,6 +732,7 @@ export default function TasksPage() {
   });
   const config = configsRes?.data?.data?.[0] || null;
   const isPushMode = config?.syncMode === 'push';
+  const headers = resolveHeaders(config?.headers);
 
   const { data: usersRes } = useQuery({
     queryKey: ['users', 'employees-for-task-assign'],
@@ -486,10 +742,10 @@ export default function TasksPage() {
   const employees = usersRes?.data?.data || [];
 
   const { data: tasksRes, isLoading: tasksLoading, isFetching: tasksFetching } = useQuery({
-    queryKey: ['google-sheets-tasks', 'admin', config?._id, page, LIMIT, search, employeeFilter, statusFilter],
+    queryKey: ['google-sheets-tasks', 'admin', config?._id, search, employeeFilter, statusFilter],
     queryFn: () => getGoogleSheetTasks(config?._id, {
-      page,
-      limit: LIMIT,
+      page: 1,
+      limit: ADMIN_FETCH_LIMIT,
       search,
       employee: employeeFilter || undefined,
       status: statusFilter || undefined,
@@ -500,8 +756,34 @@ export default function TasksPage() {
   });
 
   const tasksData = tasksRes?.data?.data || [];
-  const totalTasks = tasksRes?.data?.meta?.total || 0;
+
+  const { data: allManualTasksRes, isFetching: allManualTasksFetching } = useQuery({
+    queryKey: ['all-manual-tasks', 'admin', search, employeeFilter, statusFilter],
+    queryFn: () => getTasks({
+      page: 1,
+      limit: ADMIN_FETCH_LIMIT,
+      search: search || undefined,
+      employee: employeeFilter || undefined,
+      status: statusFilter || undefined,
+      sortBy: 'createdAt',
+      sortOrder: 'desc',
+    }),
+    enabled: Boolean(config?._id) && isSuperAdmin,
+    keepPreviousData: true,
+    refetchInterval: 15000,
+  });
+
+  const allManualTasksRaw = allManualTasksRes?.data?.data || [];
+  const adminManualRows = allManualTasksRaw.map((t) =>
+    mapManualTaskToRow(t, headers, t.assignedTo?.name || '')
+  );
+  const allAdminRows = [
+    ...adminManualRows,
+    ...tasksData.map((row) => ({ ...row, _source: 'sheet' })),
+  ];
+  const totalTasks = allAdminRows.length;
   const totalPages = Math.ceil(totalTasks / LIMIT);
+  const paginatedAdminRows = allAdminRows.slice((page - 1) * LIMIT, page * LIMIT);
 
   const { data: availableTasksRes, isLoading: availableLoading, isFetching: availableFetching } = useQuery({
     queryKey: ['google-sheets-tasks', 'available', config?._id, search],
@@ -515,12 +797,27 @@ export default function TasksPage() {
     refetchInterval: 10000,
   });
 
-  const availableTasks = availableTasksRes?.data?.data || [];
-  const employeeTotalTasks = availableTasksRes?.data?.meta?.total || 0;
+  const availableTasks = (availableTasksRes?.data?.data || []).map((row) => ({ ...row, _source: 'sheet' }));
+
+  // Employee ke khud ke banaye hue manual tasks — same headers ke saath table me merge honge
+  const { data: myTasksRes, isLoading: myTasksLoading, isFetching: myTasksFetching } = useQuery({
+    queryKey: ['my-tasks', search],
+    queryFn: () => getTasks({ page: 1, limit: 200, search: search || undefined, sortBy: 'createdAt', sortOrder: 'desc' }),
+    enabled: isEmployee,
+    refetchInterval: 15000,
+  });
+  const myTasksRaw = myTasksRes?.data?.data || [];
+
+  // ── unified rows: manual tasks + sheet tasks, EK hi table me
+  const employeeName = user?.name || '';
+  const manualRows = myTasksRaw.map((t) => mapManualTaskToRow(t, headers, employeeName));
+  const combinedEmployeeRows = [...manualRows, ...availableTasks];
+  const employeeTotalTasks = combinedEmployeeRows.length;
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['google-sheets-configs'] });
     queryClient.invalidateQueries({ queryKey: ['google-sheets-tasks'] });
+    queryClient.invalidateQueries({ queryKey: ['my-tasks'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard'] });
   };
 
@@ -565,6 +862,62 @@ export default function TasksPage() {
     onSettled: () => setAssigningTaskId(''),
   });
 
+  // Admin manual-task reassignment: manual tasks live in the Task model, not the
+  // Google Sheet rows, so they must go through the regular updateTask API
+  // (superadmin is allowed to change `assignedTo` there) instead of assignGoogleSheetTask.
+  const adminManualAssignMutation = useMutation({
+    mutationFn: ({ taskId, employeeId }) => {
+      const fd = new FormData();
+      fd.append('assignedTo', employeeId);
+      return updateTask(taskId, fd);
+    },
+    onMutate: ({ taskId }) => setAssigningTaskId(taskId),
+    onSuccess: () => {
+      toast.success('Task assigned');
+      invalidateAll();
+      queryClient.invalidateQueries({ queryKey: ['all-manual-tasks'] });
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Failed to assign task'),
+    onSettled: () => setAssigningTaskId(''),
+  });
+
+  // Employee ke apne manual tasks ke CRUD mutations
+  const createTaskMutation = useMutation({
+    mutationFn: (formData) => createTask(formData),
+    onSuccess: () => {
+      toast.success('Task created successfully');
+      setTaskModal(null);
+      queryClient.invalidateQueries({ queryKey: ['my-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['all-manual-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Failed to create task'),
+  });
+
+  const updateTaskMutation = useMutation({
+    mutationFn: ({ id, formData }) => updateTask(id, formData),
+    onSuccess: () => {
+      toast.success('Task updated successfully');
+      setTaskModal(null);
+      queryClient.invalidateQueries({ queryKey: ['my-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['all-manual-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Failed to update task'),
+  });
+
+  const deleteTaskMutation = useMutation({
+    mutationFn: (id) => deleteTask(id),
+    onSuccess: () => {
+      toast.success('Task deleted successfully');
+      setDeleteTaskTarget(null);
+      queryClient.invalidateQueries({ queryKey: ['my-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['all-manual-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Failed to delete task'),
+  });
+
   const handleSelfAssign = (taskId) => {
     selfAssignMutation.mutate(taskId);
   };
@@ -574,11 +927,27 @@ export default function TasksPage() {
     adminAssignMutation.mutate({ taskId, employeeId });
   };
 
+  const handleAdminManualAssign = (taskId, employeeId) => {
+    if (!employeeId) return;
+    adminManualAssignMutation.mutate({ taskId, employeeId });
+  };
+
   const handleConnect = (e) => {
     e.preventDefault();
     if (!sheetUrl.trim()) { toast.error('URL is required'); return; }
     saveConfigMutation.mutate({ url: sheetUrl, name: sheetName || undefined, syncMode });
   };
+
+  const handleTaskFormSubmit = (formData) => {
+    if (taskModal === 'create') {
+      createTaskMutation.mutate(formData);
+    } else {
+      updateTaskMutation.mutate({ id: taskModal._id, formData });
+    }
+  };
+
+  // Row click: manual rows ke andar _raw / data dono hote hain, TaskDetailModal ko row hi chahiye
+  const handleRowClick = (row) => setSelectedRow(row);
 
   // ── loading
   if (configLoading) return (
@@ -701,57 +1070,61 @@ export default function TasksPage() {
                 <FiAlertTriangle className="h-3.5 w-3.5 text-red-500 ml-1.5" />
               )}
             </Button>
-            {(tasksFetching || availableFetching) && (
+            {isEmployee && (
+              <Button icon={FiPlus} onClick={() => setTaskModal('create')}>
+                Add Task
+              </Button>
+            )}
+            {(tasksFetching || availableFetching || myTasksFetching || allManualTasksFetching) && (
               <div className="flex items-center gap-1.5 text-xs text-slate-400">
                 <FiRefreshCw className="h-3.5 w-3.5 animate-spin" />
                 Refreshing...
               </div>
             )}
             <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">
-              {isSuperAdmin ? totalTasks : employeeTotalTasks} task{(isSuperAdmin ? totalTasks : employeeTotalTasks) !== 1 ? 's' : ''} · click a row to view full details
+              {isSuperAdmin
+                ? `${totalTasks} task${totalTasks !== 1 ? 's' : ''}`
+                : `${employeeTotalTasks} in pool (${manualRows.length} mine · ${availableTasks.length} available)`}
+              {' · '}click a row to view full details
             </span>
           </div>
 
           {/* ──────────── TABLE ──────────── */}
           {isEmployee ? (
-            <div className="flex flex-col gap-8">
-              <section className="flex flex-col gap-3">
-                <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">Available Tasks</h2>
-                  <span className="text-xs text-slate-500">{availableTasks.length} available</span>
-                </div>
-                {availableLoading ? (
-                  <div className="flex flex-col gap-2">
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="h-11 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 animate-pulse" />
-                    ))}
-                  </div>
-                ) : availableTasks.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200 py-10 text-center text-sm text-slate-500 dark:border-slate-700">
-                    No unassigned tasks available.
-                  </div>
-                ) : (
-                  <TaskTable
-                    rows={availableTasks}
-                    headers={config.headers || []}
-                    onRowClick={setSelectedRow}
-                    activeRowId={selectedRow?._id}
-                    isAdmin={false}
-                    onSelfAssign={handleSelfAssign}
-                    assigningTaskId={assigningTaskId}
-                    section="available"
-                  />
-                )}
-              </section>
-
-            </div>
+            (myTasksLoading || availableLoading) ? (
+              <div className="flex flex-col gap-2">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="h-11 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 animate-pulse" />
+                ))}
+              </div>
+            ) : combinedEmployeeRows.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-24 text-center">
+                <FiGrid className="h-12 w-12 text-slate-300 dark:text-slate-600 mb-4" />
+                <p className="text-sm font-medium text-slate-500">
+                  No tasks yet. Click "Add Task" to create your own, or wait for tasks to be synced.
+                </p>
+              </div>
+            ) : (
+              <TaskTable
+                rows={combinedEmployeeRows}
+                headers={headers}
+                onRowClick={handleRowClick}
+                activeRowId={selectedRow?._id}
+                isAdmin={false}
+                onSelfAssign={handleSelfAssign}
+                assigningTaskId={assigningTaskId}
+                section="available"
+                onEditManual={(taskDoc) => setTaskModal(taskDoc)}
+                onDeleteManual={(taskDoc) => setDeleteTaskTarget(taskDoc)}
+              />
+            )
           ) : tasksLoading ? (
             <div className="flex flex-col gap-2">
               {[1, 2, 3, 4, 5].map((i) => (
                 <div key={i} className="h-11 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 animate-pulse" />
               ))}
             </div>
-          ) : tasksData.length === 0 ? (
+          ) : (allAdminRows.length === 0) ? (
             <div className="flex flex-col items-center justify-center py-24 text-center">
               <FiGrid className="h-12 w-12 text-slate-300 dark:text-slate-600 mb-4" />
               <p className="text-sm font-medium text-slate-500">
@@ -763,14 +1136,17 @@ export default function TasksPage() {
           ) : (
             <>
               <TaskTable
-                rows={tasksData}
-                headers={config.headers || []}
-                onRowClick={setSelectedRow}
+                rows={paginatedAdminRows}
+                headers={headers}
+                onRowClick={handleRowClick}
                 activeRowId={selectedRow?._id}
                 isAdmin
                 employees={employees}
                 onAdminAssign={handleAdminAssign}
+                onAdminManualAssign={handleAdminManualAssign}
                 assigningTaskId={assigningTaskId}
+                onEditManual={(taskDoc) => setTaskModal(taskDoc)}
+                onDeleteManual={(taskDoc) => setDeleteTaskTarget(taskDoc)}
               />
 
               {/* Pagination */}
@@ -803,7 +1179,7 @@ export default function TasksPage() {
       {selectedRow && (
         <TaskDetailModal
           row={selectedRow}
-          headers={config?.headers || []}
+          headers={headers}
           onClose={() => setSelectedRow(null)}
         />
       )}
@@ -823,6 +1199,15 @@ export default function TasksPage() {
         />
       )}
 
+      {taskModal && (
+        <TaskFormModal
+          task={taskModal === 'create' ? null : taskModal}
+          onClose={() => setTaskModal(null)}
+          isLoading={createTaskMutation.isPending || updateTaskMutation.isPending}
+          onSubmit={handleTaskFormSubmit}
+        />
+      )}
+
       <ConfirmDialog
         isOpen={disconnectConfirm}
         onClose={() => setDisconnectConfirm(false)}
@@ -831,6 +1216,16 @@ export default function TasksPage() {
         message="All synced task data will be removed from the CRM database. Continue?"
         confirmLabel="Disconnect"
         isLoading={deleteMutation.isPending}
+      />
+
+      <ConfirmDialog
+        isOpen={Boolean(deleteTaskTarget)}
+        onClose={() => setDeleteTaskTarget(null)}
+        onConfirm={() => deleteTaskMutation.mutate(deleteTaskTarget._id)}
+        title="Delete Task"
+        message={`Are you sure you want to delete "${deleteTaskTarget?.title}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        isLoading={deleteTaskMutation.isPending}
       />
     </div>
   );
