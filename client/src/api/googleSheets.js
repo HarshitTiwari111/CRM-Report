@@ -17,4 +17,12 @@ export const assignGoogleSheetTask = (taskId, employeeId) =>
 export const updateGoogleSheetTaskProgress = (taskId, payload) =>
   axiosInstance.patch(`/google-sheets/tasks/${taskId}/progress`, payload);
 
+export const updateGoogleSheetTask = (taskId, payload) =>
+  axiosInstance.patch(`/google-sheets/tasks/${taskId}/content`, payload);
+
+export const releaseGoogleSheetTask = (taskId) =>
+  axiosInstance.patch(`/google-sheets/tasks/${taskId}/release`);
+
+export const deleteGoogleSheetTask = (taskId) => axiosInstance.delete(`/google-sheets/tasks/${taskId}`);
+
 export const deleteGoogleSheet = (id) => axiosInstance.delete(`/google-sheets/${id}`);

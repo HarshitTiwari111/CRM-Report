@@ -11,6 +11,7 @@ const {
   bulkUpdate,
   bulkDelete,
   importCsvTasks,
+  selfAssignTask,
 } = require('../controllers/taskController');
 const { protect } = require('../middleware/auth');
 const validate = require('../middleware/validate');
@@ -40,6 +41,7 @@ router.get('/:id', mongoIdParamValidator, validate, getTask);
 router.put('/:id', uploadAttachments, updateTaskValidator, validate, updateTask);
 router.delete('/:id', mongoIdParamValidator, validate, deleteTask);
 router.patch('/:id/status', statusPatchValidator, validate, patchStatus);
+router.patch('/:id/self-assign', mongoIdParamValidator, validate, selfAssignTask);
 router.post('/:id/duplicate', mongoIdParamValidator, validate, duplicateTask);
 
 module.exports = router;

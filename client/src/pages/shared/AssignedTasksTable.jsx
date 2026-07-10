@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
-import { FiClock, FiFileText, FiSave, FiUser } from 'react-icons/fi';
-import { Badge } from '../../components/ui';
+import { FiClock, FiFileText, FiSave, FiUser, FiUserX } from 'react-icons/fi';
+import { Badge, Button, Select } from '../../components/ui';
 
 const statusColor = {
   pending: 'slate',
@@ -132,9 +132,15 @@ export default function AssignedTasksTable({
   showEmployee = true,
   onUpdateProgress,
   updatingTaskId,
+  employees = [],
+  onAssignTask,
+  assigningTaskId,
+  onReleaseTask,
+  releasingTaskId,
 }) {
   const titleKey = pickTitleKey(headers);
   const detailHeaders = headers.filter((header) => header !== titleKey).slice(0, 3);
+  const canManageAssignment = Boolean(onAssignTask || onReleaseTask);
 
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
@@ -165,6 +171,11 @@ export default function AssignedTasksTable({
               {onUpdateProgress && (
                 <th className="min-w-[380px] px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
                   Update
+                </th>
+              )}
+              {canManageAssignment && (
+                <th className="min-w-[220px] px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
+                  Change Assignment
                 </th>
               )}
               <th className="min-w-[170px] px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
@@ -233,6 +244,35 @@ export default function AssignedTasksTable({
                         onUpdateProgress={onUpdateProgress}
                         isUpdating={updatingTaskId === task._id}
                       />
+                    </td>
+                  )}
+                  {canManageAssignment && (
+                    <td className="px-4 py-3">
+                      {onAssignTask ? (
+                        <Select
+                          value={task.assignedTo?._id || ''}
+                          onChange={(e) => onAssignTask(task._id, e.target.value)}
+                          disabled={assigningTaskId === task._id}
+                          placeholder="Select employee"
+                          className="min-w-[180px]"
+                          options={employees.map((employee) => ({
+                            value: employee._id,
+                            label: employee.name,
+                          }))}
+                        />
+                      ) : onReleaseTask && !task._isManual && task.assignmentSource === 'employee' ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          icon={FiUserX}
+                          onClick={() => onReleaseTask(task._id)}
+                          isLoading={releasingTaskId === task._id}
+                        >
+                          Release
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-slate-400">{task._isManual ? 'Own task' : 'Admin assigned'}</span>
+                      )}
                     </td>
                   )}
                   <td className="px-4 py-3 text-slate-600 dark:text-slate-300">

@@ -2,7 +2,12 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { FiRefreshCw, FiSearch, FiCheckSquare } from 'react-icons/fi';
-import { getGoogleSheets, getGoogleSheetTasks, updateGoogleSheetTaskProgress } from '../../api/googleSheets';
+import {
+  getGoogleSheets,
+  getGoogleSheetTasks,
+  releaseGoogleSheetTask,
+  updateGoogleSheetTaskProgress,
+} from '../../api/googleSheets';
 import { getTasks, setTaskStatus } from '../../api/tasks';
 import { useAuth } from '../../hooks/useAuth';
 import { Input, PageHeader } from '../../components/ui';
@@ -50,6 +55,7 @@ export default function AssignedTasksPage() {
   const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [updatingTaskId, setUpdatingTaskId] = useState('');
+  const [releasingTaskId, setReleasingTaskId] = useState('');
   const queryClient = useQueryClient();
 
   const { data: configsRes, isLoading: configLoading } = useQuery({
@@ -58,7 +64,22 @@ export default function AssignedTasksPage() {
   });
 
   const config = configsRes?.data?.data?.[0] || null;
-  const headers = config?.headers || [];
+  const DEFAULT_SHEET_HEADERS = [
+    'Timestamp',
+    'Your Name',
+    'Task Name',
+    'Vertical / Department',
+    'Who Currently Does This?',
+    'How Often?',
+    'Time Per Occurrence',
+    'Tools / Platforms Used',
+    'working developer',
+    'Step-by-Step Process',
+    'Pain Level',
+    'Current Task Status',
+    'Additional Notes / Edge Cases',
+  ];
+  const headers = config?.headers?.length ? config.headers : DEFAULT_SHEET_HEADERS;
 
   const { data: tasksRes, isLoading: sheetLoading, isFetching: sheetFetching } = useQuery({
     queryKey: ['google-sheets-tasks', 'employee-assigned-page', config?._id, search],
@@ -119,6 +140,17 @@ export default function AssignedTasksPage() {
     onSettled: () => setUpdatingTaskId(''),
   });
 
+  const releaseTaskMutation = useMutation({
+    mutationFn: releaseGoogleSheetTask,
+    onMutate: (taskId) => setReleasingTaskId(taskId),
+    onSuccess: () => {
+      toast.success('Task released');
+      invalidateAssigned();
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Failed to release task'),
+    onSettled: () => setReleasingTaskId(''),
+  });
+
   const handleUpdateProgress = (taskId, payload) => {
     const task = tasks.find((item) => item._id === taskId);
     if (task?._isManual) {
@@ -129,6 +161,10 @@ export default function AssignedTasksPage() {
       return;
     }
     updateSheetProgressMutation.mutate({ taskId, payload });
+  };
+
+  const handleReleaseTask = (taskId) => {
+    releaseTaskMutation.mutate(taskId);
   };
 
   if (configLoading) {
@@ -190,6 +226,8 @@ export default function AssignedTasksPage() {
               showEmployee={false}
               onUpdateProgress={handleUpdateProgress}
               updatingTaskId={updatingTaskId}
+              onReleaseTask={handleReleaseTask}
+              releasingTaskId={releasingTaskId}
             />
           )}
         </>

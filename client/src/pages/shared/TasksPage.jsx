@@ -18,9 +18,10 @@ import {
   getGoogleSheets, saveGoogleSheet, syncGoogleSheet,
   getGoogleSheetTasks, deleteGoogleSheet,
   selfAssignGoogleSheetTask, assignGoogleSheetTask,
+  updateGoogleSheetTask, deleteGoogleSheetTask,
 } from '../../api/googleSheets';
 import { getUsers } from '../../api/users';
-import { getTasks, createTask, updateTask, deleteTask } from '../../api/tasks';
+import { getTasks, createTask, updateTask, deleteTask, selfAssignTask } from '../../api/tasks';
 
 /* ────────────────────────────────────────────────────────────────────────────
    Helpers
@@ -105,11 +106,12 @@ const parseExtraNotes = (notes) => {
 const mapManualTaskToRow = (task, headers, currentUserName) => {
   const extra = parseExtraNotes(task.notes);
   const data = {};
+  const displayName = task.assignedTo?.name || task.createdBy?.name || currentUserName || '';
 
   headers.forEach((h) => {
     if (/task.?name|title|subject/i.test(h)) data[h] = task.title || '';
     else if (/timestamp/i.test(h)) data[h] = task.taskDate || task.createdAt || '';
-    else if (/^your name$/i.test(h)) data[h] = currentUserName || '';
+    else if (/^your name$/i.test(h)) data[h] = displayName;
     else if (/step-by-step|process/i.test(h)) data[h] = task.description || '';
     else if (/pain level/i.test(h)) data[h] = task.priority || '';
     else if (/additional notes|edge case/i.test(h)) data[h] = task.remarks || '';
@@ -128,6 +130,7 @@ const mapManualTaskToRow = (task, headers, currentUserName) => {
     status: task.status || 'pending',
     progress,
     assignedTo: task.assignedTo,
+    createdBy: task.createdBy,
     _source: 'manual',
     _raw: task,
   };
@@ -186,6 +189,12 @@ const formatIfDate = (header, value) => {
   try { return format(p, 'MMM d, yyyy'); } catch { return value; }
 };
 
+const toDateInputValue = (value) => {
+  const parsed = new Date(value);
+  if (isNaN(parsed)) return format(new Date(), 'yyyy-MM-dd');
+  try { return format(parsed, 'yyyy-MM-dd'); } catch { return format(new Date(), 'yyyy-MM-dd'); }
+};
+
 /* ────────────────────────────────────────────────────────────────────────────
    TaskTable — single shared table for Google Sheet rows AND manual (employee-
    added) rows. Manual rows are tagged with _source === 'manual' and get
@@ -205,6 +214,7 @@ function TaskTable({
   onEditManual,
   onDeleteManual,
   onAdminManualAssign,
+  currentUserId,
 }) {
   const titleKey =
     headers.find((h) => /task.?name|title|subject/i.test(h)) ||
@@ -246,6 +256,9 @@ function TaskTable({
               const title = String(data[titleKey] || 'Untitled Task').trim();
               const isActive = activeRowId === row._id;
               const isManual = row._source === 'manual';
+              const assignedId = row.assignedTo?._id || row.assignedTo || '';
+              const creatorId = row.createdBy?._id || row.createdBy || '';
+              const canEditDelete = isAdmin || !isManual || assignedId === currentUserId || creatorId === currentUserId;
               const rowBg = isActive
                 ? 'bg-primary-50 dark:bg-primary-900/20'
                 : 'bg-white dark:bg-slate-800 group-hover:bg-slate-50 dark:group-hover:bg-slate-700/30';
@@ -262,11 +275,6 @@ function TaskTable({
                   <td className={`sticky left-0 z-10 px-4 py-3 font-medium text-slate-800 dark:text-slate-100 max-w-[280px] transition-colors ${rowBg}`}>
                     <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar whitespace-nowrap">
                       {title}
-                      {isManual && (
-                        <span className="flex-shrink-0 rounded-full bg-primary-100 dark:bg-primary-900/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary-600 dark:text-primary-300">
-                          Mine
-                        </span>
-                      )}
                     </div>
                   </td>
                   {otherHeaders.map((h) => {
@@ -294,57 +302,57 @@ function TaskTable({
                     <ProgressMini value={row.progress} />
                   </td>
                   <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                    {isManual && !isAdmin ? (
-                      <div className="flex items-center gap-1.5">
-                        <span className="inline-flex items-center rounded-full bg-primary-100 px-2.5 py-1 text-xs font-medium text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">
-                          Yours
+                    <div className="flex items-center gap-1.5">
+                      {isAdmin ? (
+                        <Select
+                          value={row.assignedTo?._id || row.assignedTo || ''}
+                          onChange={(e) =>
+                            isManual
+                              ? onAdminManualAssign(row._id, e.target.value)
+                              : onAdminAssign(row._id, e.target.value)
+                          }
+                          disabled={assigningTaskId === row._id}
+                          placeholder="Assign employee"
+                          className="min-w-[170px]"
+                          options={employees.map((employee) => ({
+                            value: employee._id,
+                            label: employee.name,
+                          }))}
+                        />
+                      ) : row.assignedTo?._id ? (
+                        <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700 dark:bg-green-900/40 dark:text-green-300">
+                          Assigned to You
                         </span>
-                        <button
-                          onClick={() => onEditManual(row._raw)}
-                          className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-primary-600 dark:hover:bg-slate-700 transition-colors"
-                          title="Edit task"
+                      ) : section === 'available' ? (
+                        <Button
+                          size="sm"
+                          onClick={() => onSelfAssign(row)}
+                          isLoading={assigningTaskId === row._id}
                         >
-                          <FiEdit2 className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          onClick={() => onDeleteManual(row._raw)}
-                          className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30 transition-colors"
-                          title="Delete task"
-                        >
-                          <FiTrash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    ) : isAdmin ? (
-                      <Select
-                        value={row.assignedTo?._id || row.assignedTo || ''}
-                        onChange={(e) =>
-                          isManual
-                            ? onAdminManualAssign(row._id, e.target.value)
-                            : onAdminAssign(row._id, e.target.value)
-                        }
-                        disabled={assigningTaskId === row._id}
-                        placeholder="Assign employee"
-                        className="min-w-[170px]"
-                        options={employees.map((employee) => ({
-                          value: employee._id,
-                          label: employee.name,
-                        }))}
-                      />
-                    ) : row.assignedTo?._id ? (
-                      <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700 dark:bg-green-900/40 dark:text-green-300">
-                        Assigned to You
-                      </span>
-                    ) : section === 'available' ? (
-                      <Button
-                        size="sm"
-                        onClick={() => onSelfAssign(row._id)}
-                        isLoading={assigningTaskId === row._id}
-                      >
-                        Assign to Me
-                      </Button>
-                    ) : (
-                      <span className="text-xs text-slate-400">Available</span>
-                    )}
+                          Assign to Me
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-slate-400">Available</span>
+                      )}
+                      {canEditDelete && (
+                        <>
+                          <button
+                            onClick={() => onEditManual(isManual ? row._raw : row)}
+                            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-primary-600 dark:hover:bg-slate-700 transition-colors"
+                            title="Edit task"
+                          >
+                            <FiEdit2 className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => onDeleteManual(isManual ? row._raw : row)}
+                            className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30 transition-colors"
+                            title="Delete task"
+                          >
+                            <FiTrash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );
@@ -447,23 +455,34 @@ function TaskDetailModal({ row, headers, onClose }) {
    Fields yahan Google Sheet ke headers se hi naam liye gaye hain, taaki jo
    row table me bane vo baaki rows jaisi hi dikhe.
 ──────────────────────────────────────────────────────────────────────────── */
-function TaskFormModal({ task, onClose, onSubmit, isLoading }) {
+function TaskFormModal({ task, headers, onClose, onSubmit, isLoading }) {
   const isEdit = Boolean(task);
+  const isSheetTask = task?._source === 'sheet';
+  const sheetData = isSheetTask ? task.data || {} : {};
+  const sheetTitleKey =
+    headers.find((h) => /task.?name|title|subject/i.test(h)) ||
+    headers[1] ||
+    headers[0] ||
+    'Task Name';
   const extra = parseExtraNotes(task?.notes);
 
   const [form, setForm] = useState({
-    title: task?.title || '',
-    description: task?.description || '',
-    priority: task?.priority || 'medium',
-    status: task?.status || 'pending',
-    taskDate: task?.taskDate ? format(new Date(task.taskDate), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
-    remarks: task?.remarks || '',
-    department: extra['Vertical / Department'] || '',
-    whoDoes: extra['Who Currently Does This?'] || '',
-    howOften: extra['How Often?'] || '',
-    timePerOccurrence: extra['Time Per Occurrence'] || '',
-    tools: extra['Tools / Platforms Used'] || '',
-    workingDeveloper: extra['working developer'] || '',
+    title: isSheetTask ? sheetData[sheetTitleKey] || '' : task?.title || '',
+    description: isSheetTask
+      ? sheetData['Step-by-Step Process'] || sheetData['Step-by-Step Process '] || ''
+      : task?.description || '',
+    priority: isSheetTask ? (sheetData['Pain Level'] || 'medium').toLowerCase() : task?.priority || 'medium',
+    status: isSheetTask ? task?.status || sheetData['Current Task Status'] || 'pending' : task?.status || 'pending',
+    taskDate: isSheetTask
+      ? toDateInputValue(sheetData.Timestamp || task?.createdAt || new Date())
+      : task?.taskDate ? format(new Date(task.taskDate), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
+    remarks: isSheetTask ? sheetData['Additional Notes / Edge Cases'] || '' : task?.remarks || '',
+    department: isSheetTask ? sheetData['Vertical / Department'] || '' : extra['Vertical / Department'] || '',
+    whoDoes: isSheetTask ? sheetData['Who Currently Does This?'] || '' : extra['Who Currently Does This?'] || '',
+    howOften: isSheetTask ? sheetData['How Often?'] || '' : extra['How Often?'] || '',
+    timePerOccurrence: isSheetTask ? sheetData['Time Per Occurrence'] || '' : extra['Time Per Occurrence'] || '',
+    tools: isSheetTask ? sheetData['Tools / Platforms Used'] || '' : extra['Tools / Platforms Used'] || '',
+    workingDeveloper: isSheetTask ? sheetData['working developer'] || '' : extra['working developer'] || '',
   });
 
   const handleChange = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
@@ -489,8 +508,14 @@ function TaskFormModal({ task, onClose, onSubmit, isLoading }) {
     fd.append('taskDate', form.taskDate);
     fd.append('remarks', form.remarks);
     fd.append('notes', JSON.stringify(extraNotes));
+    fd.append('departmentText', form.department);
+    fd.append('whoDoes', form.whoDoes);
+    fd.append('howOften', form.howOften);
+    fd.append('timePerOccurrence', form.timePerOccurrence);
+    fd.append('tools', form.tools);
+    fd.append('workingDeveloper', form.workingDeveloper);
 
-    onSubmit(fd);
+    onSubmit(fd, task);
   };
 
   return (
@@ -802,7 +827,14 @@ export default function TasksPage() {
   // Employee ke khud ke banaye hue manual tasks — same headers ke saath table me merge honge
   const { data: myTasksRes, isLoading: myTasksLoading, isFetching: myTasksFetching } = useQuery({
     queryKey: ['my-tasks', search],
-    queryFn: () => getTasks({ page: 1, limit: 200, search: search || undefined, sortBy: 'createdAt', sortOrder: 'desc' }),
+    queryFn: () => getTasks({
+      page: 1,
+      limit: 200,
+      search: search || undefined,
+      scope: 'pool',
+      sortBy: 'createdAt',
+      sortOrder: 'desc',
+    }),
     enabled: isEmployee,
     refetchInterval: 15000,
   });
@@ -813,6 +845,8 @@ export default function TasksPage() {
   const manualRows = myTasksRaw.map((t) => mapManualTaskToRow(t, headers, employeeName));
   const combinedEmployeeRows = [...manualRows, ...availableTasks];
   const employeeTotalTasks = combinedEmployeeRows.length;
+  const assignedManualRows = manualRows.filter((row) => row.assignedTo?._id || row.assignedTo).length;
+  const availableManualRows = manualRows.length - assignedManualRows;
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['google-sheets-configs'] });
@@ -842,6 +876,17 @@ export default function TasksPage() {
 
   const selfAssignMutation = useMutation({
     mutationFn: selfAssignGoogleSheetTask,
+    onMutate: (taskId) => setAssigningTaskId(taskId),
+    onSuccess: () => {
+      toast.success('Task assigned to you');
+      invalidateAll();
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'This task has already been assigned to someone else'),
+    onSettled: () => setAssigningTaskId(''),
+  });
+
+  const manualSelfAssignMutation = useMutation({
+    mutationFn: selfAssignTask,
     onMutate: (taskId) => setAssigningTaskId(taskId),
     onSuccess: () => {
       toast.success('Task assigned to you');
@@ -906,6 +951,16 @@ export default function TasksPage() {
     onError: (err) => toast.error(err.response?.data?.message || 'Failed to update task'),
   });
 
+  const updateSheetTaskMutation = useMutation({
+    mutationFn: ({ id, payload }) => updateGoogleSheetTask(id, payload),
+    onSuccess: () => {
+      toast.success('Task updated successfully');
+      setTaskModal(null);
+      invalidateAll();
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Failed to update task'),
+  });
+
   const deleteTaskMutation = useMutation({
     mutationFn: (id) => deleteTask(id),
     onSuccess: () => {
@@ -918,8 +973,22 @@ export default function TasksPage() {
     onError: (err) => toast.error(err.response?.data?.message || 'Failed to delete task'),
   });
 
-  const handleSelfAssign = (taskId) => {
-    selfAssignMutation.mutate(taskId);
+  const deleteSheetTaskMutation = useMutation({
+    mutationFn: (id) => deleteGoogleSheetTask(id),
+    onSuccess: () => {
+      toast.success('Task deleted successfully');
+      setDeleteTaskTarget(null);
+      invalidateAll();
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Failed to delete task'),
+  });
+
+  const handleSelfAssign = (row) => {
+    if (row?._source === 'manual') {
+      manualSelfAssignMutation.mutate(row._id);
+      return;
+    }
+    selfAssignMutation.mutate(row._id);
   };
 
   const handleAdminAssign = (taskId, employeeId) => {
@@ -938,9 +1007,37 @@ export default function TasksPage() {
     saveConfigMutation.mutate({ url: sheetUrl, name: sheetName || undefined, syncMode });
   };
 
-  const handleTaskFormSubmit = (formData) => {
+  const handleTaskFormSubmit = (formData, sourceTask) => {
     if (taskModal === 'create') {
       createTaskMutation.mutate(formData);
+    } else if (sourceTask?._source === 'sheet') {
+      const titleKey =
+        headers.find((h) => /task.?name|title|subject/i.test(h)) ||
+        headers[1] ||
+        headers[0] ||
+        'Task Name';
+      const nextData = { ...(sourceTask.data || {}) };
+      nextData[titleKey] = formData.get('title') || '';
+      nextData.Timestamp = formData.get('taskDate') || nextData.Timestamp || '';
+      nextData['Vertical / Department'] = formData.get('departmentText') || nextData['Vertical / Department'] || '';
+      nextData['Step-by-Step Process'] = formData.get('description') || '';
+      nextData['Who Currently Does This?'] = formData.get('whoDoes') || '';
+      nextData['How Often?'] = formData.get('howOften') || '';
+      nextData['Time Per Occurrence'] = formData.get('timePerOccurrence') || '';
+      nextData['Tools / Platforms Used'] = formData.get('tools') || '';
+      nextData['working developer'] = formData.get('workingDeveloper') || '';
+      nextData['Pain Level'] = formData.get('priority') || '';
+      nextData['Current Task Status'] = formData.get('status') || '';
+      nextData['Additional Notes / Edge Cases'] = formData.get('remarks') || '';
+
+      updateSheetTaskMutation.mutate({
+        id: sourceTask._id,
+        payload: {
+          data: nextData,
+          status: formData.get('status') || sourceTask.status || 'pending',
+          progress: sourceTask.progress || 0,
+        },
+      });
     } else {
       updateTaskMutation.mutate({ id: taskModal._id, formData });
     }
@@ -1084,7 +1181,7 @@ export default function TasksPage() {
             <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">
               {isSuperAdmin
                 ? `${totalTasks} task${totalTasks !== 1 ? 's' : ''}`
-                : `${employeeTotalTasks} in pool (${manualRows.length} mine · ${availableTasks.length} available)`}
+                : `${employeeTotalTasks} in pool (${assignedManualRows} assigned · ${availableManualRows + availableTasks.length} available)`}
               {' · '}click a row to view full details
             </span>
           </div>
@@ -1114,6 +1211,7 @@ export default function TasksPage() {
                 onSelfAssign={handleSelfAssign}
                 assigningTaskId={assigningTaskId}
                 section="available"
+                currentUserId={user?._id}
                 onEditManual={(taskDoc) => setTaskModal(taskDoc)}
                 onDeleteManual={(taskDoc) => setDeleteTaskTarget(taskDoc)}
               />
@@ -1145,6 +1243,7 @@ export default function TasksPage() {
                 onAdminAssign={handleAdminAssign}
                 onAdminManualAssign={handleAdminManualAssign}
                 assigningTaskId={assigningTaskId}
+                currentUserId={user?._id}
                 onEditManual={(taskDoc) => setTaskModal(taskDoc)}
                 onDeleteManual={(taskDoc) => setDeleteTaskTarget(taskDoc)}
               />
@@ -1202,8 +1301,9 @@ export default function TasksPage() {
       {taskModal && (
         <TaskFormModal
           task={taskModal === 'create' ? null : taskModal}
+          headers={headers}
           onClose={() => setTaskModal(null)}
-          isLoading={createTaskMutation.isPending || updateTaskMutation.isPending}
+          isLoading={createTaskMutation.isPending || updateTaskMutation.isPending || updateSheetTaskMutation.isPending}
           onSubmit={handleTaskFormSubmit}
         />
       )}
@@ -1221,11 +1321,19 @@ export default function TasksPage() {
       <ConfirmDialog
         isOpen={Boolean(deleteTaskTarget)}
         onClose={() => setDeleteTaskTarget(null)}
-        onConfirm={() => deleteTaskMutation.mutate(deleteTaskTarget._id)}
+        onConfirm={() =>
+          deleteTaskTarget?._source === 'sheet'
+            ? deleteSheetTaskMutation.mutate(deleteTaskTarget._id)
+            : deleteTaskMutation.mutate(deleteTaskTarget._id)
+        }
         title="Delete Task"
-        message={`Are you sure you want to delete "${deleteTaskTarget?.title}"? This action cannot be undone.`}
+        message={`Are you sure you want to delete "${
+          deleteTaskTarget?._source === 'sheet'
+            ? String((deleteTaskTarget.data || {})[headers.find((h) => /task.?name|title|subject/i.test(h)) || headers[1] || headers[0]] || 'Untitled Task')
+            : deleteTaskTarget?.title
+        }"? This action cannot be undone.`}
         confirmLabel="Delete"
-        isLoading={deleteTaskMutation.isPending}
+        isLoading={deleteTaskMutation.isPending || deleteSheetTaskMutation.isPending}
       />
     </div>
   );

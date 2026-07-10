@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'react-toastify';
 import { FiRefreshCw, FiSearch, FiUsers } from 'react-icons/fi';
-import { getGoogleSheets, getGoogleSheetTasks } from '../../api/googleSheets';
+import { assignGoogleSheetTask, getGoogleSheets, getGoogleSheetTasks } from '../../api/googleSheets';
 import { getUsers } from '../../api/users';
 import { Input, PageHeader, Select } from '../../components/ui';
 import AssignedTasksTable from '../shared/AssignedTasksTable';
@@ -10,6 +11,8 @@ export default function TaskMonitorPage() {
   const [search, setSearch] = useState('');
   const [employeeFilter, setEmployeeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [assigningTaskId, setAssigningTaskId] = useState('');
+  const queryClient = useQueryClient();
 
   const { data: configsRes, isLoading: configLoading } = useQuery({
     queryKey: ['google-sheets-configs'],
@@ -41,6 +44,23 @@ export default function TaskMonitorPage() {
 
   const tasks = tasksRes?.data?.data || [];
   const activeEmployees = new Set(tasks.map((task) => task.assignedTo?._id).filter(Boolean)).size;
+
+  const assignMutation = useMutation({
+    mutationFn: ({ taskId, employeeId }) => assignGoogleSheetTask(taskId, employeeId),
+    onMutate: ({ taskId }) => setAssigningTaskId(taskId),
+    onSuccess: () => {
+      toast.success('Task assignment updated');
+      queryClient.invalidateQueries({ queryKey: ['google-sheets-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: (error) => toast.error(error.response?.data?.message || 'Failed to update assignment'),
+    onSettled: () => setAssigningTaskId(''),
+  });
+
+  const handleAssignTask = (taskId, employeeId) => {
+    if (!employeeId) return;
+    assignMutation.mutate({ taskId, employeeId });
+  };
 
   if (configLoading) {
     return (
@@ -127,7 +147,14 @@ export default function TaskMonitorPage() {
               <p className="text-sm font-medium text-slate-500">No assigned tasks match the selected filters.</p>
             </div>
           ) : (
-            <AssignedTasksTable tasks={tasks} headers={config.headers || []} showEmployee />
+            <AssignedTasksTable
+              tasks={tasks}
+              headers={config.headers?.length ? config.headers : ['Timestamp', 'Your Name', 'Task Name', 'Step-by-Step Process']}
+              showEmployee
+              employees={employees}
+              onAssignTask={handleAssignTask}
+              assigningTaskId={assigningTaskId}
+            />
           )}
         </>
       )}

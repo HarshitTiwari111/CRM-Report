@@ -18,6 +18,8 @@ export const deleteTask = (id) => axiosInstance.delete(`/tasks/${id}`);
 
 export const setTaskStatus = (id, status) => axiosInstance.patch(`/tasks/${id}/status`, { status });
 
+export const selfAssignTask = (id) => axiosInstance.patch(`/tasks/${id}/self-assign`);
+
 export const duplicateTask = (id) => axiosInstance.post(`/tasks/${id}/duplicate`);
 
 export const bulkUpdateTasks = (ids, update) =>

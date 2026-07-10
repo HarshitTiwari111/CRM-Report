@@ -13,6 +13,7 @@ const POPULATE_FIELDS = [
   { path: 'client', select: 'name' },
   { path: 'department', select: 'name' },
   { path: 'assignedTo', select: 'name email employeeId manager' },
+  { path: 'createdBy', select: 'name email employeeId' },
 ];
 
 const buildAttachments = (files = []) =>
@@ -21,6 +22,9 @@ const buildAttachments = (files = []) =>
     type: file.mimetype,
     name: file.originalname,
   }));
+
+const isOwnedByUser = (task, userId) =>
+  Boolean(task.assignedTo?._id?.equals(userId) || task.assignedTo?.equals?.(userId) || task.createdBy?.equals?.(userId));
 
 const computeTotalHours = (startTime, endTime) => {
   if (!startTime || !endTime) return 0;
@@ -47,22 +51,35 @@ const listTasks = asyncHandler(async (req, res) => {
     dateTo,
     sortBy = 'taskDate',
     sortOrder = 'desc',
+    scope,
   } = req.query;
 
   const filter = {};
 
   if (req.user.role === 'employee') {
-    filter.assignedTo = req.user._id;
+    if (scope === 'pool') {
+      filter.$or = [{ assignedTo: null }, { assignedTo: req.user._id }];
+    } else if (scope === 'available') {
+      filter.assignedTo = null;
+    } else {
+      filter.assignedTo = req.user._id;
+    }
   } else if (employee) {
     filter.assignedTo = employee;
   }
 
   if (search) {
-    filter.$or = [
+    const searchOr = [
       { title: { $regex: search, $options: 'i' } },
       { description: { $regex: search, $options: 'i' } },
       { remarks: { $regex: search, $options: 'i' } },
     ];
+    if (filter.$or) {
+      filter.$and = [{ $or: filter.$or }, { $or: searchOr }];
+      delete filter.$or;
+    } else {
+      filter.$or = searchOr;
+    }
   }
   if (status) filter.status = status;
   if (priority) filter.priority = priority;
@@ -127,7 +144,7 @@ const getTask = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'Task not found');
   }
 
-  if (req.user.role === 'employee' && !task.assignedTo._id.equals(req.user._id)) {
+  if (req.user.role === 'employee' && !isOwnedByUser(task, req.user._id)) {
     throw new ApiError(403, 'You do not have permission to view this task');
   }
 
@@ -138,7 +155,8 @@ const getTask = asyncHandler(async (req, res) => {
 const createTask = asyncHandler(async (req, res) => {
   const body = { ...req.body };
 
-  const assignedTo = req.user.role === 'employee' ? req.user._id : body.assignedTo || req.user._id;
+  const assignedTo = req.user.role === 'employee' ? body.assignedTo || null : body.assignedTo || req.user._id;
+  const status = assignedTo ? body.status || 'pending' : 'pending';
 
   if (!body.totalHours) {
     body.totalHours = computeTotalHours(body.startTime, body.endTime);
@@ -147,6 +165,7 @@ const createTask = asyncHandler(async (req, res) => {
   const task = await Task.create({
     ...body,
     assignedTo,
+    status,
     createdBy: req.user._id,
     attachments: buildAttachments(req.files),
   });
@@ -155,14 +174,16 @@ const createTask = asyncHandler(async (req, res) => {
 
   await logActivity(req.user._id, 'create-task', { taskId: task._id.toString(), title: task.title }, req.ip);
 
-  await notifyManagersAndAdmins({
-    employee: populated.assignedTo,
-    title: 'New task created',
-    message: `${populated.assignedTo.name} created a task: "${task.title}"`,
-    type: 'task',
-    link: `/tasks/${task._id}`,
-    relatedId: task._id,
-  });
+  if (populated.assignedTo) {
+    await notifyManagersAndAdmins({
+      employee: populated.assignedTo,
+      title: 'New task created',
+      message: `${populated.assignedTo.name} created a task: "${task.title}"`,
+      type: 'task',
+      link: `/tasks/${task._id}`,
+      relatedId: task._id,
+    });
+  }
 
   res.status(201).json({ success: true, data: populated });
 });
@@ -175,7 +196,7 @@ const updateTask = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'Task not found');
   }
 
-  if (req.user.role === 'employee' && !task.assignedTo._id.equals(req.user._id)) {
+  if (req.user.role === 'employee' && !isOwnedByUser(task, req.user._id)) {
     throw new ApiError(403, 'You do not have permission to update this task');
   }
 
@@ -224,16 +245,39 @@ const updateTask = asyncHandler(async (req, res) => {
 
   await logActivity(req.user._id, 'update-task', { taskId: task._id.toString() }, req.ip);
 
-  await notifyManagersAndAdmins({
-    employee: populated.assignedTo,
-    title: 'Task updated',
-    message: `${populated.assignedTo.name} updated task: "${task.title}"`,
-    type: 'task',
-    link: `/tasks/${task._id}`,
-    relatedId: task._id,
-  });
+  if (populated.assignedTo) {
+    await notifyManagersAndAdmins({
+      employee: populated.assignedTo,
+      title: 'Task updated',
+      message: `${populated.assignedTo.name} updated task: "${task.title}"`,
+      type: 'task',
+      link: `/tasks/${task._id}`,
+      relatedId: task._id,
+    });
+  }
 
   res.json({ success: true, data: populated });
+});
+
+// PATCH /tasks/:id/self-assign
+const selfAssignTask = asyncHandler(async (req, res) => {
+  if (req.user.role !== 'employee') {
+    throw new ApiError(403, 'Only employees can self-assign tasks');
+  }
+
+  const task = await Task.findOneAndUpdate(
+    { _id: req.params.id, assignedTo: null },
+    { $set: { assignedTo: req.user._id, status: 'pending' } },
+    { new: true }
+  ).populate(POPULATE_FIELDS);
+
+  if (!task) {
+    throw new ApiError(409, 'This task has already been assigned to someone else');
+  }
+
+  await logActivity(req.user._id, 'self-assign-task', { taskId: task._id.toString() }, req.ip);
+
+  res.json({ success: true, data: task });
 });
 
 // DELETE /tasks/:id
@@ -244,7 +288,7 @@ const deleteTask = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'Task not found');
   }
 
-  if (req.user.role === 'employee' && !task.assignedTo._id.equals(req.user._id)) {
+  if (req.user.role === 'employee' && !isOwnedByUser(task, req.user._id)) {
     throw new ApiError(403, 'You do not have permission to delete this task');
   }
 
@@ -252,13 +296,15 @@ const deleteTask = asyncHandler(async (req, res) => {
 
   await logActivity(req.user._id, 'delete-task', { taskId: req.params.id, title: task.title }, req.ip);
 
-  await notifyManagersAndAdmins({
-    employee: task.assignedTo,
-    title: 'Task deleted',
-    message: `${task.assignedTo.name} deleted task: "${task.title}"`,
-    type: 'task',
-    relatedId: task._id,
-  });
+  if (task.assignedTo) {
+    await notifyManagersAndAdmins({
+      employee: task.assignedTo,
+      title: 'Task deleted',
+      message: `${task.assignedTo.name} deleted task: "${task.title}"`,
+      type: 'task',
+      relatedId: task._id,
+    });
+  }
 
   res.json({ success: true, data: { message: 'Task deleted successfully' } });
 });
@@ -271,7 +317,7 @@ const patchStatus = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'Task not found');
   }
 
-  if (req.user.role === 'employee' && !task.assignedTo._id.equals(req.user._id)) {
+  if (req.user.role === 'employee' && !isOwnedByUser(task, req.user._id)) {
     throw new ApiError(403, 'You do not have permission to update this task');
   }
 
@@ -285,14 +331,16 @@ const patchStatus = asyncHandler(async (req, res) => {
 
   await logActivity(req.user._id, 'update-task-status', { taskId: task._id.toString(), status: task.status }, req.ip);
 
-  await notifyManagersAndAdmins({
-    employee: populated.assignedTo,
-    title: 'Task status changed',
-    message: `${populated.assignedTo.name} marked "${task.title}" as ${task.status}`,
-    type: 'task',
-    link: `/tasks/${task._id}`,
-    relatedId: task._id,
-  });
+  if (populated.assignedTo) {
+    await notifyManagersAndAdmins({
+      employee: populated.assignedTo,
+      title: 'Task status changed',
+      message: `${populated.assignedTo.name} marked "${task.title}" as ${task.status}`,
+      type: 'task',
+      link: `/tasks/${task._id}`,
+      relatedId: task._id,
+    });
+  }
 
   res.json({ success: true, data: populated });
 });
@@ -509,4 +557,5 @@ module.exports = {
   bulkUpdate,
   bulkDelete,
   importCsvTasks,
+  selfAssignTask,
 };

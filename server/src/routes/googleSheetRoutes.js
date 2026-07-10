@@ -20,6 +20,9 @@ const normalizeProgress = (value) => {
   return Math.min(100, Math.max(0, Math.round(progress)));
 };
 
+const canEmployeeManageSheetTask = (task, userId) =>
+  !task.assignedTo || task.assignedTo.equals(userId);
+
 // POST /api/google-sheets/webhook-sync - Google Apps Script webhook to sync private sheets
 router.post(
   '/webhook-sync',
@@ -296,6 +299,98 @@ router.patch(
     }
 
     res.json({ success: true, data: task });
+  })
+);
+
+// PATCH /api/google-sheets/tasks/:taskId/release - Employee releases a self-assigned task; admin can unassign any sheet task
+router.patch(
+  '/tasks/:taskId/release',
+  asyncHandler(async (req, res) => {
+    const task = await GoogleSheetTask.findById(req.params.taskId);
+    if (!task) {
+      throw new ApiError(404, 'Task not found');
+    }
+
+    if (req.user.role === 'employee') {
+      if (!task.assignedTo || !task.assignedTo.equals(req.user._id)) {
+        throw new ApiError(403, 'You can only release tasks assigned to you');
+      }
+      if (task.assignmentSource !== 'employee') {
+        throw new ApiError(403, 'Admin-assigned tasks can only be changed by an admin');
+      }
+    } else if (req.user.role !== 'superadmin') {
+      throw new ApiError(403, 'Access denied');
+    }
+
+    task.assignedTo = null;
+    task.assignedAt = null;
+    task.assignedBy = null;
+    task.assignmentSource = null;
+    task.status = 'pending';
+    task.progress = 0;
+
+    await task.save();
+
+    const populated = await task.populate([
+      { path: 'assignedTo', select: 'name email employeeId' },
+      { path: 'assignedBy', select: 'name email employeeId role' },
+    ]);
+
+    res.json({ success: true, data: populated });
+  })
+);
+
+// PATCH /api/google-sheets/tasks/:taskId/content - Edit a synced sheet task inside CRM
+router.patch(
+  '/tasks/:taskId/content',
+  asyncHandler(async (req, res) => {
+    const task = await GoogleSheetTask.findById(req.params.taskId);
+    if (!task) {
+      throw new ApiError(404, 'Task not found');
+    }
+
+    if (req.user.role === 'employee' && !canEmployeeManageSheetTask(task, req.user._id)) {
+      throw new ApiError(403, 'You can only edit available tasks or tasks assigned to you');
+    }
+
+    if (req.body.data && typeof req.body.data === 'object') {
+      task.data = req.body.data;
+    }
+    if (req.body.status && TRACKING_STATUSES.includes(req.body.status)) {
+      task.status = req.body.status;
+    }
+    const progress = normalizeProgress(req.body.progress);
+    if (progress !== undefined) {
+      task.progress = progress;
+    }
+
+    await task.save();
+
+    const populated = await task.populate([
+      { path: 'assignedTo', select: 'name email employeeId' },
+      { path: 'assignedBy', select: 'name email employeeId role' },
+    ]);
+
+    res.json({ success: true, data: populated });
+  })
+);
+
+// DELETE /api/google-sheets/tasks/:taskId - Remove a synced sheet task from CRM
+router.delete(
+  '/tasks/:taskId',
+  asyncHandler(async (req, res) => {
+    const task = await GoogleSheetTask.findById(req.params.taskId);
+    if (!task) {
+      throw new ApiError(404, 'Task not found');
+    }
+
+    if (req.user.role === 'employee' && !canEmployeeManageSheetTask(task, req.user._id)) {
+      throw new ApiError(403, 'You can only delete available tasks or tasks assigned to you');
+    }
+
+    await task.deleteOne();
+
+    res.json({ success: true, data: { message: 'Task deleted successfully' } });
   })
 );
 
