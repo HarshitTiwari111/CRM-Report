@@ -20,6 +20,7 @@ import { downloadPdfReport } from '../../api/reports';
 import { getUsers } from '../../api/users';
 import { getDepartments, getProjects } from '../../api/metadata';
 import { getTasks } from '../../api/tasks';
+import { getGoogleSheets, getGoogleSheetTasks } from '../../api/googleSheets';
 import { DATE_RANGE_PRESETS, REPORT_TYPE_OPTIONS, TASK_STATUS_OPTIONS } from '../../utils/constants';
 import { cn } from '../../utils/cn';
 
@@ -93,6 +94,15 @@ export default function ReportsPage() {
     select: (res) => res.data.data,
   });
 
+  // ── Google Sheet config — needed so we can also pull sheet-sourced tasks
+  // into the report preview (previously only Task-model rows were counted,
+  // so any tasks synced from Google Sheets were silently missing here).
+  const { data: sheetConfigRes } = useQuery({
+    queryKey: ['google-sheets-configs'],
+    queryFn: getGoogleSheets,
+  });
+  const sheetConfig = sheetConfigRes?.data?.data?.[0] || null;
+
   const { dateFrom, dateTo } = useMemo(
     () => computeRange(preset, customFrom, customTo),
     [preset, customFrom, customTo]
@@ -145,8 +155,10 @@ export default function ReportsPage() {
   };
 
   const previewEnabled = Boolean(dateFrom && dateTo);
-  const { data: preview, isFetching: previewLoading } = useQuery({
-    queryKey: ['tasks', 'report-preview', filters],
+
+  // ── Manual (Task-model) tasks for the preview
+  const { data: manualPreview, isFetching: manualPreviewLoading } = useQuery({
+    queryKey: ['tasks', 'report-preview-manual', filters],
     queryFn: () =>
       getTasks({
         employee: filters.employeeId,
@@ -156,7 +168,7 @@ export default function ReportsPage() {
         dateFrom: filters.dateFrom,
         dateTo: filters.dateTo,
         page: 1,
-        limit: 8,
+        limit: 500, // fetch full range so merged totals/preview are accurate
         sortBy: 'taskDate',
         sortOrder: 'desc',
       }),
@@ -165,8 +177,67 @@ export default function ReportsPage() {
     keepPreviousData: true,
   });
 
-  const previewRows = preview?.data || [];
-  const totalMatching = preview?.meta?.total ?? 0;
+  // ── Google Sheet tasks for the preview
+  const { data: sheetPreviewRes, isFetching: sheetPreviewLoading } = useQuery({
+    queryKey: ['google-sheets-tasks', 'report-preview', sheetConfig?._id, filters],
+    queryFn: () =>
+      getGoogleSheetTasks(sheetConfig._id, {
+        page: 1,
+        limit: 500,
+        search: '',
+        employee: filters.employeeId,
+        status: filters.status,
+        view: isSuperAdmin ? 'all' : 'mine',
+      }),
+    enabled: previewEnabled && Boolean(sheetConfig?._id),
+    keepPreviousData: true,
+  });
+
+  const previewLoading = manualPreviewLoading || sheetPreviewLoading;
+
+  // Sheet rows -> same shape as Task rows (title, assignedTo, taskDate,
+  // totalHours, status) so the stat cards / table below don't need branching.
+  const sheetHeaders = sheetConfig?.headers?.length
+    ? sheetConfig.headers
+    : [
+        'Timestamp',
+        'Your Name',
+        'Task Name',
+        'Step-by-Step Process',
+        'Pain Level',
+        'Current Task Status',
+        'Additional Notes / Edge Cases',
+      ];
+  const sheetTitleKey =
+    sheetHeaders.find((h) => /task.?name|title|subject/i.test(h)) || sheetHeaders[1] || sheetHeaders[0];
+
+  const rawSheetRows = sheetPreviewRes?.data?.data || [];
+  const mappedSheetRows = rawSheetRows
+    .map((row) => {
+      const data = row.data || {};
+      const dateRaw = data.Timestamp || row.createdAt;
+      const dateObj = dateRaw ? new Date(dateRaw) : null;
+      return {
+        _id: row._id,
+        title: String(data[sheetTitleKey] || 'Untitled Task'),
+        assignedTo: row.assignedTo,
+        taskDate: dateObj && !isNaN(dateObj) ? dateObj.toISOString() : null,
+        totalHours: 0, // sheet-sourced tasks don't carry an hours field
+        status: row.status || 'pending',
+      };
+    })
+    // The sheet-tasks route has no dateFrom/dateTo params, so the date
+    // range is applied client-side here.
+    .filter((row) => {
+      if (!row.taskDate || !filters.dateFrom || !filters.dateTo) return true;
+      const d = format(new Date(row.taskDate), 'yyyy-MM-dd');
+      return d >= filters.dateFrom && d <= filters.dateTo;
+    });
+
+  const manualRows = manualPreview?.data || [];
+  const previewRows = [...manualRows, ...mappedSheetRows].slice(0, 8);
+  const totalMatching = (manualPreview?.meta?.total ?? manualRows.length) + mappedSheetRows.length;
+
   const totalHoursPreview = previewRows.reduce((sum, t) => sum + (t.totalHours || 0), 0);
   const completedPreview = previewRows.filter((t) => t.status === 'completed').length;
 
