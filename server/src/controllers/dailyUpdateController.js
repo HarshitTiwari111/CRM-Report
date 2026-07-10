@@ -96,7 +96,75 @@ const createDailyUpdate = asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, data: populated });
 });
 
+// PUT /daily-updates/:id
+const updateDailyUpdate = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const update = await DailyUpdate.findById(id);
+
+  if (!update) {
+    throw new ApiError(404, 'Daily update not found');
+  }
+
+  const isOwner = update.employee.toString() === req.user._id.toString();
+  const isSuperAdmin = req.user.role === 'superadmin';
+
+  if (!isOwner && !isSuperAdmin) {
+    throw new ApiError(403, 'You do not have permission to edit this daily update');
+  }
+
+  const workDate = normalizeWorkDate(req.body.workDate);
+  const items = parseItems(req.body.items);
+  const notes = String(req.body.notes || '').trim();
+
+  if (!workDate) {
+    throw new ApiError(400, 'Please provide a valid work date');
+  }
+
+  if (!items.length) {
+    throw new ApiError(400, 'Please add at least one work item');
+  }
+
+  update.workDate = workDate;
+  update.items = items;
+  update.notes = notes;
+
+  await update.save();
+
+  const populated = await update.populate('employee', 'name email employeeId');
+
+  await logActivity(req.user._id, 'update-daily-update', { dailyUpdateId: update._id.toString() }, req.ip);
+
+  res.json({ success: true, data: populated });
+});
+
+// DELETE /daily-updates/:id
+const deleteDailyUpdate = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const update = await DailyUpdate.findById(id);
+
+  if (!update) {
+    throw new ApiError(404, 'Daily update not found');
+  }
+
+  const isOwner = update.employee.toString() === req.user._id.toString();
+  const isSuperAdmin = req.user.role === 'superadmin';
+
+  if (!isOwner && !isSuperAdmin) {
+    throw new ApiError(403, 'You do not have permission to delete this daily update');
+  }
+
+  await update.deleteOne();
+
+  await logActivity(req.user._id, 'delete-daily-update', { dailyUpdateId: id }, req.ip);
+
+  res.json({ success: true, message: 'Daily update deleted' });
+});
+
 module.exports = {
   listDailyUpdates,
   createDailyUpdate,
+  updateDailyUpdate,
+  deleteDailyUpdate,
 };

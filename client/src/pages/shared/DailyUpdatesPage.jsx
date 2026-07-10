@@ -9,6 +9,8 @@ import {
   FiRefreshCw,
   FiSearch,
   FiEdit3,
+  FiEdit2,
+  FiTrash2,
   FiPlus,
   FiChevronLeft,
   FiChevronRight,
@@ -20,7 +22,12 @@ import {
 } from 'react-icons/fi';
 import { Button, Card, Input, PageHeader, Select, Textarea } from '../../components/ui';
 import { useAuth } from '../../hooks/useAuth';
-import { createDailyUpdate, getDailyUpdates } from '../../api/dailyUpdates';
+import {
+  createDailyUpdate,
+  getDailyUpdates,
+  updateDailyUpdate,
+  deleteDailyUpdate,
+} from '../../api/dailyUpdates';
 import { getUsers } from '../../api/users';
 
 const PAGE_SIZE = 10;
@@ -71,7 +78,7 @@ function Modal({ open, onClose, title, children }) {
 /* -------------------------------------------------------------------------- */
 /* Reusable Detail Drawer (sidebar)                                           */
 /* -------------------------------------------------------------------------- */
-function DetailDrawer({ update, isAdmin, onClose }) {
+function DetailDrawer({ update, isAdmin, onClose, onEdit, onDelete, isDeleting }) {
   if (!update) return null;
   const items = update.items || [];
 
@@ -140,6 +147,24 @@ function DetailDrawer({ update, isAdmin, onClose }) {
             </>
           ) : null}
         </div>
+
+        {/* Employee can edit/delete their own update from here */}
+        {!isAdmin && (
+          <div className="flex items-center justify-end gap-3 border-t border-slate-100 px-6 py-4 dark:border-slate-700">
+            <Button variant="secondary" icon={FiEdit2} onClick={() => onEdit(update)}>
+              Edit
+            </Button>
+            <Button
+              variant="secondary"
+              icon={FiTrash2}
+              isLoading={isDeleting}
+              onClick={() => onDelete(update._id)}
+              className="!text-red-500 hover:!bg-red-50 dark:hover:!bg-red-900/20"
+            >
+              Delete
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -163,6 +188,8 @@ export default function DailyUpdatesPage() {
 
   const [showFormModal, setShowFormModal] = useState(false);
   const [selectedUpdate, setSelectedUpdate] = useState(null);
+  // Holds the update currently being edited; null means "creating new"
+  const [editingUpdate, setEditingUpdate] = useState(null);
 
   const { data: employeesRes } = useQuery({
     queryKey: ['daily-updates', 'employees'],
@@ -195,16 +222,56 @@ export default function DailyUpdatesPage() {
   const total = updatesRes?.data?.meta?.total || 0;
   const totalPages = updatesRes?.data?.meta?.pages || 1;
 
+  const resetForm = () => {
+    setItemsText('');
+    setNotes('');
+    setWorkDate(format(new Date(), 'yyyy-MM-dd'));
+    setEditingUpdate(null);
+  };
+
+  const openCreateModal = () => {
+    resetForm();
+    setShowFormModal(true);
+  };
+
+  const openEditModal = (update) => {
+    setEditingUpdate(update);
+    setWorkDate(format(new Date(update.workDate), 'yyyy-MM-dd'));
+    setItemsText((update.items || []).join('\n'));
+    setNotes(update.notes || '');
+    setShowFormModal(true);
+  };
+
   const createMutation = useMutation({
     mutationFn: createDailyUpdate,
     onSuccess: () => {
       toast.success('Daily update saved');
-      setItemsText('');
-      setNotes('');
+      resetForm();
       setShowFormModal(false);
       queryClient.invalidateQueries({ queryKey: ['daily-updates'] });
     },
     onError: (error) => toast.error(error.response?.data?.message || 'Failed to save daily update'),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => updateDailyUpdate(id, data),
+    onSuccess: () => {
+      toast.success('Daily update updated');
+      resetForm();
+      setShowFormModal(false);
+      queryClient.invalidateQueries({ queryKey: ['daily-updates'] });
+    },
+    onError: (error) => toast.error(error.response?.data?.message || 'Failed to update daily update'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => deleteDailyUpdate(id),
+    onSuccess: () => {
+      toast.success('Daily update deleted');
+      setSelectedUpdate(null);
+      queryClient.invalidateQueries({ queryKey: ['daily-updates'] });
+    },
+    onError: (error) => toast.error(error.response?.data?.message || 'Failed to delete daily update'),
   });
 
   const handleSubmit = (e) => {
@@ -216,11 +283,19 @@ export default function DailyUpdatesPage() {
       return;
     }
 
-    createMutation.mutate({
-      workDate,
-      items,
-      notes: notes || undefined,
-    });
+    const payload = { workDate, items, notes: notes || undefined };
+
+    if (editingUpdate) {
+      updateMutation.mutate({ id: editingUpdate._id, data: payload });
+    } else {
+      createMutation.mutate(payload);
+    }
+  };
+
+  const handleDelete = (id) => {
+    if (window.confirm('Are you sure you want to delete this update? This cannot be undone.')) {
+      deleteMutation.mutate(id);
+    }
   };
 
   const clearFilters = () => {
@@ -232,6 +307,7 @@ export default function DailyUpdatesPage() {
   };
 
   const hasActiveFilters = search || employeeFilter || dateFrom || dateTo;
+  const isSavingForm = createMutation.isPending || updateMutation.isPending;
 
   return (
     <div className="flex flex-col gap-6">
@@ -246,15 +322,22 @@ export default function DailyUpdatesPage() {
           }
         />
         {!isSuperAdmin && (
-          <Button icon={FiPlus} onClick={() => setShowFormModal(true)} className="shrink-0">
+          <Button icon={FiPlus} onClick={openCreateModal} className="shrink-0">
             Add Update
           </Button>
         )}
       </div>
 
-      {/* Submit form now lives in a modal */}
+      {/* Submit / Edit form lives in a modal */}
       {!isSuperAdmin && (
-        <Modal open={showFormModal} onClose={() => setShowFormModal(false)} title="Submit Daily Update">
+        <Modal
+          open={showFormModal}
+          onClose={() => {
+            setShowFormModal(false);
+            resetForm();
+          }}
+          title={editingUpdate ? 'Edit Daily Update' : 'Submit Daily Update'}
+        >
           <form className="grid gap-4" onSubmit={handleSubmit}>
             <div className="grid gap-4 sm:grid-cols-2">
               <Input
@@ -287,11 +370,18 @@ export default function DailyUpdatesPage() {
             />
 
             <div className="flex items-center justify-end gap-3 pt-1">
-              <Button type="button" variant="secondary" onClick={() => setShowFormModal(false)}>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setShowFormModal(false);
+                  resetForm();
+                }}
+              >
                 Cancel
               </Button>
-              <Button type="submit" icon={FiPlus} isLoading={createMutation.isPending}>
-                Save Update
+              <Button type="submit" icon={editingUpdate ? FiEdit2 : FiPlus} isLoading={isSavingForm}>
+                {editingUpdate ? 'Update' : 'Save Update'}
               </Button>
             </div>
           </form>
@@ -432,6 +522,7 @@ export default function DailyUpdatesPage() {
                   const items = update.items || [];
                   const preview = items.slice(0, 2).join(', ');
                   const remaining = items.length - 2;
+                  const isDeletingThis = deleteMutation.isPending && deleteMutation.variables === update._id;
 
                   return (
                     <tr
@@ -470,7 +561,39 @@ export default function DailyUpdatesPage() {
                         {update.notes || '-'}
                       </td>
                       <td className="px-5 py-3.5 text-right">
-                        <FiArrowRight className="ml-auto h-4 w-4 text-slate-300" />
+                        {!isSuperAdmin ? (
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              title="Edit"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openEditModal(update);
+                              }}
+                              className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700"
+                            >
+                              <FiEdit2 className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              title="Delete"
+                              disabled={isDeletingThis}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(update._id);
+                              }}
+                              className="rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:hover:bg-red-900/20"
+                            >
+                              {isDeletingThis ? (
+                                <FiRefreshCw className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <FiTrash2 className="h-4 w-4" />
+                              )}
+                            </button>
+                          </div>
+                        ) : (
+                          <FiArrowRight className="ml-auto h-4 w-4 text-slate-300" />
+                        )}
                       </td>
                     </tr>
                   );
@@ -487,6 +610,14 @@ export default function DailyUpdatesPage() {
           update={selectedUpdate}
           isAdmin={isSuperAdmin}
           onClose={() => setSelectedUpdate(null)}
+          onEdit={(u) => {
+            setSelectedUpdate(null);
+            openEditModal(u);
+          }}
+          onDelete={(id) => {
+            handleDelete(id);
+          }}
+          isDeleting={deleteMutation.isPending && deleteMutation.variables === selectedUpdate._id}
         />
       )}
 
