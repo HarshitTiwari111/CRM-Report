@@ -69,8 +69,9 @@ const userSchema = new mongoose.Schema(
 
 userSchema.pre('save', async function preSave(next) {
   if (!this.employeeId) {
-    const count = await mongoose.model('User').countDocuments();
-    this.employeeId = `EMP${String(count + 1).padStart(4, '0')}`;
+    const last = await mongoose.model('User').findOne({}, 'employeeId').sort({ employeeId: -1 });
+    const lastNum = last?.employeeId ? parseInt(last.employeeId.replace('EMP', ''), 10) || 0 : 0;
+    this.employeeId = `EMP${String(lastNum + 1).padStart(4, '0')}`;
   }
   next();
 });
