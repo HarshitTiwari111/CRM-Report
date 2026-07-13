@@ -211,12 +211,21 @@ export default function ReportsPage() {
   const sheetTitleKey =
     sheetHeaders.find((h) => /task.?name|title|subject/i.test(h)) || sheetHeaders[1] || sheetHeaders[0];
 
+  const parseSheetDate = (raw) => {
+    if (!raw) return null;
+    const d = new Date(raw);
+    if (!isNaN(d)) return d;
+    const m = String(raw).match(/^(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})\s*(.*)?$/);
+    if (m) return new Date(`${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}T${m[4] || '00:00:00'}`);
+    return null;
+  };
+
   const rawSheetRows = sheetPreviewRes?.data?.data || [];
   const mappedSheetRows = rawSheetRows
     .map((row) => {
       const data = row.data || {};
       const dateRaw = data.Timestamp || row.createdAt;
-      const dateObj = dateRaw ? new Date(dateRaw) : null;
+      const dateObj = parseSheetDate(dateRaw);
       return {
         _id: row._id,
         title: String(data[sheetTitleKey] || 'Untitled Task'),
@@ -235,11 +244,12 @@ export default function ReportsPage() {
     });
 
   const manualRows = manualPreview?.data || [];
-  const previewRows = [...manualRows, ...mappedSheetRows].slice(0, 8);
-  const totalMatching = (manualPreview?.meta?.total ?? manualRows.length) + mappedSheetRows.length;
+  const allRows = [...manualRows, ...mappedSheetRows];
+  const previewRows = allRows.slice(0, 8);
+  const totalMatching = allRows.length;
 
-  const totalHoursPreview = previewRows.reduce((sum, t) => sum + (t.totalHours || 0), 0);
-  const completedPreview = previewRows.filter((t) => t.status === 'completed').length;
+  const totalHoursPreview = allRows.reduce((sum, t) => sum + (t.totalHours || 0), 0);
+  const completedPreview = allRows.filter((t) => t.status === 'completed').length;
 
   const pdfMutation = useMutation({
     mutationFn: () => downloadPdfReport(filters),
@@ -394,13 +404,13 @@ export default function ReportsPage() {
             <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
               <StatCard label="Matching Tasks" value={previewLoading ? undefined : totalMatching} icon={FiList} color="indigo" />
               <StatCard
-                label="Completed (shown)"
+                label="Completed"
                 value={previewLoading ? undefined : completedPreview}
                 icon={FiCheckCircle}
                 color="green"
               />
               <StatCard
-                label="Hours (shown)"
+                label="Total Hours"
                 value={previewLoading ? undefined : totalHoursPreview}
                 icon={FiClock}
                 color="blue"
