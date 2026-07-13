@@ -353,7 +353,7 @@ const duplicateTask = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'Task not found');
   }
 
-  if (req.user.role === 'employee' && !task.assignedTo.equals(req.user._id)) {
+  if (req.user.role === 'employee' && (!task.assignedTo || !task.assignedTo.equals(req.user._id))) {
     throw new ApiError(403, 'You do not have permission to duplicate this task');
   }
 
@@ -467,7 +467,7 @@ const importCsvTasks = asyncHandler(async (req, res) => {
 
     let assignedToId = req.user._id;
     if (yourName) {
-      const matchedUser = await User.findOne({ name: { $regex: new RegExp(`^${yourName.trim()}$`, 'i') } });
+      const matchedUser = await User.findOne({ name: { $regex: new RegExp(`^${yourName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } });
       if (matchedUser) {
         assignedToId = matchedUser._id;
       }
@@ -475,7 +475,7 @@ const importCsvTasks = asyncHandler(async (req, res) => {
 
     let departmentId = null;
     if (deptName) {
-      let deptDoc = await Department.findOne({ name: { $regex: new RegExp(`^${deptName.trim()}$`, 'i') } });
+      let deptDoc = await Department.findOne({ name: { $regex: new RegExp(`^${deptName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } });
       if (!deptDoc) {
         deptDoc = await Department.create({ name: deptName.trim() });
       }

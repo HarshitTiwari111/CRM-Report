@@ -211,11 +211,11 @@ const getUserPerformance = asyncHandler(async (req, res) => {
 
   const [statusAgg, hoursAgg] = await Promise.all([
     Task.aggregate([
-      { $match: { assignedTo: user._id } },
+      { $match: { assignedTo: user._id, isArchived: { $ne: true } } },
       { $group: { _id: '$status', count: { $sum: 1 } } },
     ]),
     Task.aggregate([
-      { $match: { assignedTo: user._id } },
+      { $match: { assignedTo: user._id, isArchived: { $ne: true } } },
       { $group: { _id: null, avgHours: { $avg: '$totalHours' }, totalHours: { $sum: '$totalHours' } } },
     ]),
   ]);

@@ -17,7 +17,7 @@ const productivity = asyncHandler(async (req, res) => {
   since.setDate(since.getDate() - daysBack);
 
   const data = await Task.aggregate([
-    { $match: { taskDate: { $gte: since } } },
+    { $match: { taskDate: { $gte: since }, isArchived: { $ne: true } } },
     {
       $group: {
         _id: { $dateToString: { format, date: '$taskDate' } },
@@ -43,7 +43,7 @@ const productivity = asyncHandler(async (req, res) => {
 // GET /analytics/department-performance
 const departmentPerformance = asyncHandler(async (req, res) => {
   const data = await Task.aggregate([
-    { $match: { department: { $ne: null } } },
+    { $match: { department: { $ne: null }, isArchived: { $ne: true } } },
     {
       $group: {
         _id: '$department',
@@ -87,6 +87,7 @@ const departmentPerformance = asyncHandler(async (req, res) => {
 // GET /analytics/employee-performance
 const employeePerformance = asyncHandler(async (req, res) => {
   const data = await Task.aggregate([
+    { $match: { isArchived: { $ne: true } } },
     {
       $group: {
         _id: '$assignedTo',
@@ -133,7 +134,7 @@ const topPerformers = asyncHandler(async (req, res) => {
   const limit = Math.max(1, parseInt(req.query.limit, 10) || 5);
 
   const data = await Task.aggregate([
-    { $match: { status: 'completed' } },
+    { $match: { status: 'completed', isArchived: { $ne: true } } },
     {
       $group: {
         _id: '$assignedTo',
@@ -173,7 +174,7 @@ const completionTrend = asyncHandler(async (req, res) => {
   since.setDate(since.getDate() - 30);
 
   const data = await Task.aggregate([
-    { $match: { taskDate: { $gte: since } } },
+    { $match: { taskDate: { $gte: since }, isArchived: { $ne: true } } },
     {
       $group: {
         _id: { $dateToString: { format: '%Y-%m-%d', date: '$taskDate' } },
