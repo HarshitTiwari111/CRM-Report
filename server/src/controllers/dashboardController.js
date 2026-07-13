@@ -58,6 +58,7 @@ const getSheetTaskTitle = (task) => {
 // GET /dashboard/admin
 const adminDashboard = asyncHandler(async (req, res) => {
   const today = { $gte: startOfDay(), $lte: endOfDay() };
+  const active = { isArchived: { $ne: true } };
 
   const [
     totalEmployees,
@@ -101,16 +102,16 @@ const adminDashboard = asyncHandler(async (req, res) => {
       .sort({ updatedAt: -1 })
       .limit(5)
       .select('data status assignedTo rowNumber updatedAt createdAt'),
-    countTasks({}),
-    countTasks({ status: 'completed' }),
-    countTasks({ status: 'pending' }),
-    countTasks({ status: 'in-progress' }),
-    countTasks({ status: 'hold' }),
-    countTasks({ status: 'cancelled' }),
-    countTasks({ status: { $in: ['pending', 'in-progress'] }, expectedCompletion: { $lt: new Date() } }),
-    countTasks({ taskDate: { $gte: startOfWeek() } }),
-    countTasks({ taskDate: { $gte: startOfMonth() } }),
-    Task.find().populate('assignedTo', 'name').sort({ createdAt: -1 }).limit(5).select('title status assignedTo createdAt'),
+    countTasks(active),
+    countTasks({ ...active, status: 'completed' }),
+    countTasks({ ...active, status: 'pending' }),
+    countTasks({ ...active, status: 'in-progress' }),
+    countTasks({ ...active, status: 'hold' }),
+    countTasks({ ...active, status: 'cancelled' }),
+    countTasks({ ...active, status: { $in: ['pending', 'in-progress'] }, expectedCompletion: { $lt: new Date() } }),
+    countTasks({ ...active, taskDate: { $gte: startOfWeek() } }),
+    countTasks({ ...active, taskDate: { $gte: startOfMonth() } }),
+    Task.find(active).populate('assignedTo', 'name').sort({ createdAt: -1 }).limit(5).select('title status assignedTo createdAt'),
     User.find({ lastLogin: { $exists: true, $ne: null } }).sort({ lastLogin: -1 }).limit(5).select('name lastLogin'),
     ActivityLog.find({ action: { $in: Object.keys(REPORT_ACTION_LABELS) } })
       .populate('user', 'name')

@@ -54,7 +54,7 @@ const listTasks = asyncHandler(async (req, res) => {
     scope,
   } = req.query;
 
-  const filter = {};
+  const filter = { isArchived: { $ne: true } };
 
   if (req.user.role === 'employee') {
     if (scope === 'pool') {
