@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const Task = require('../models/Task');
+const GoogleSheetTask = require('../models/GoogleSheetTask');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { logActivity } = require('../utils/activityLogger');
@@ -209,7 +210,7 @@ const getUserPerformance = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'User not found');
   }
 
-  const [statusAgg, hoursAgg] = await Promise.all([
+  const [statusAgg, hoursAgg, sheetStatusAgg] = await Promise.all([
     Task.aggregate([
       { $match: { assignedTo: user._id, isArchived: { $ne: true } } },
       { $group: { _id: '$status', count: { $sum: 1 } } },
@@ -218,10 +219,16 @@ const getUserPerformance = asyncHandler(async (req, res) => {
       { $match: { assignedTo: user._id, isArchived: { $ne: true } } },
       { $group: { _id: null, avgHours: { $avg: '$totalHours' }, totalHours: { $sum: '$totalHours' } } },
     ]),
+    GoogleSheetTask.aggregate([
+      { $match: { assignedTo: user._id } },
+      { $group: { _id: '$status', count: { $sum: 1 } } },
+    ]),
   ]);
 
-  const statusCounts = statusAgg.reduce((acc, s) => ({ ...acc, [s._id]: s.count }), {});
-  const totalTasks = statusAgg.reduce((sum, s) => sum + s.count, 0);
+  const statusCounts = {};
+  for (const s of statusAgg) statusCounts[s._id] = (statusCounts[s._id] || 0) + s.count;
+  for (const s of sheetStatusAgg) statusCounts[s._id] = (statusCounts[s._id] || 0) + s.count;
+  const totalTasks = Object.values(statusCounts).reduce((sum, c) => sum + c, 0);
 
   res.json({
     success: true,
@@ -230,7 +237,7 @@ const getUserPerformance = asyncHandler(async (req, res) => {
       name: user.name,
       totalTasks,
       completed: statusCounts.completed || 0,
-      pending: statusCounts.pending || 0,
+      pending: (statusCounts.pending || 0) + (statusCounts.assigned || 0),
       inProgress: statusCounts['in-progress'] || 0,
       hold: statusCounts.hold || 0,
       cancelled: statusCounts.cancelled || 0,
