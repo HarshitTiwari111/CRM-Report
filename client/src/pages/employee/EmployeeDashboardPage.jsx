@@ -6,8 +6,7 @@ import {
   FiCheckCircle,
   FiClock,
   FiLoader,
-  FiTrendingUp,
-  FiTrendingDown,
+  FiAlertCircle,
   FiPercent,
   FiList,
 } from 'react-icons/fi';
@@ -47,8 +46,7 @@ export default function EmployeeDashboardPage() {
     { label: 'Completed', value: cards.completed, icon: FiCheckCircle, color: 'green' },
     { label: 'Pending', value: cards.pending, icon: FiClock, color: 'yellow' },
     { label: 'In Progress', value: cards.inProgress, icon: FiLoader, color: 'purple' },
-    { label: 'Weekly Summary', value: cards.weeklySummary, icon: FiTrendingUp, color: 'indigo' },
-    { label: 'Monthly Summary', value: cards.monthlySummary, icon: FiTrendingDown, color: 'orange' },
+    { label: 'Overdue', value: cards.overdue, icon: FiAlertCircle, color: 'red' },
     { label: 'Avg Progress', value: `${cards.averageProgress ?? 0}%`, icon: FiPercent, color: 'green' },
   ];
 

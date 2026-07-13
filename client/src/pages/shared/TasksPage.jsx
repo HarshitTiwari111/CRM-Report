@@ -487,6 +487,20 @@ function TaskFormModal({ task, headers, onClose, onSubmit, isLoading }) {
 
   const handleChange = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
 
+  const [files, setFiles] = useState([]);
+
+  const handleFileChange = (e) => {
+    const selected = Array.from(e.target.files || []);
+    if (selected.length + files.length > 5) {
+      toast.error('Maximum 5 files allowed');
+      return;
+    }
+    setFiles((prev) => [...prev, ...selected]);
+    e.target.value = '';
+  };
+
+  const removeFile = (idx) => setFiles((prev) => prev.filter((_, i) => i !== idx));
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!form.title.trim()) { toast.error('Task title is required'); return; }
@@ -514,6 +528,7 @@ function TaskFormModal({ task, headers, onClose, onSubmit, isLoading }) {
     fd.append('timePerOccurrence', form.timePerOccurrence);
     fd.append('tools', form.tools);
     fd.append('workingDeveloper', form.workingDeveloper);
+    files.forEach((f) => fd.append('attachments', f));
 
     onSubmit(fd, task);
   };
@@ -591,6 +606,26 @@ function TaskFormModal({ task, headers, onClose, onSubmit, isLoading }) {
 
           <Input label="Timestamp" name="taskDate" type="date" value={form.taskDate} onChange={handleChange} />
           <Input label="Additional Notes / Edge Cases" name="remarks" value={form.remarks} onChange={handleChange} />
+
+          <div>
+            <label className="text-sm font-medium text-slate-700 dark:text-slate-300 block mb-1.5">Attachments (PDF, images, docs — max 5)</label>
+            <label className="flex items-center gap-2 cursor-pointer w-fit rounded-lg border border-dashed border-slate-300 dark:border-slate-600 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
+              <FiPlus className="h-4 w-4" />
+              Choose Files
+              <input type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp" onChange={handleFileChange} className="hidden" />
+            </label>
+            {files.length > 0 && (
+              <ul className="mt-2 space-y-1">
+                {files.map((f, i) => (
+                  <li key={i} className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-700/50 rounded-lg px-3 py-1.5">
+                    <span className="truncate flex-1">{f.name}</span>
+                    <span className="text-xs text-slate-400">{(f.size / 1024).toFixed(0)} KB</span>
+                    <button type="button" onClick={() => removeFile(i)} className="text-slate-400 hover:text-red-500 transition-colors"><FiX className="h-3.5 w-3.5" /></button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
