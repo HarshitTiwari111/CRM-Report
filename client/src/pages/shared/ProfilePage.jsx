@@ -80,7 +80,11 @@ export default function ProfilePage() {
   });
 
   const onProfileSubmit = (values) => {
-    profileMutation.mutate({ ...values, profilePhoto: photo || undefined });
+    const formData = new FormData();
+    formData.append('name', values.name);
+    formData.append('phone', values.phone || '');
+    if (photo) formData.append('profilePhoto', photo);
+    profileMutation.mutate(formData);
   };
 
   return (

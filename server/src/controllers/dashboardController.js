@@ -37,7 +37,7 @@ const REPORT_ACTION_LABELS = {
 };
 
 const pendingSheetStatuses = ['pending', 'assigned'];
-const pendingManualStatuses = ['pending', 'hold'];
+
 
 const manualProgressFromStatus = (status) => {
   if (status === 'completed') return 100;
@@ -64,17 +64,20 @@ const adminDashboard = asyncHandler(async (req, res) => {
     totalDepartments,
     totalTeams,
     sheetTaskCount,
-    sheetTodayCount,
     sheetCompletedCount,
     sheetPendingCount,
     sheetInProgressCount,
+    sheetHoldCount,
+    sheetCancelledCount,
     sheetWeeklyCount,
     sheetMonthlyCount,
     latestSheetTasks,
-    todayCount,
+    manualTaskCount,
     completedCount,
     pendingCount,
     inProgressCount,
+    holdCount,
+    cancelledCount,
     lateCount,
     weeklyCount,
     monthlyCount,
@@ -86,10 +89,11 @@ const adminDashboard = asyncHandler(async (req, res) => {
     Department.countDocuments(),
     Team.countDocuments(),
     countSheetTasks({}),
-    countSheetTasks({ createdAt: today }),
     countSheetTasks({ status: 'completed' }),
     countSheetTasks({ status: { $in: pendingSheetStatuses } }),
     countSheetTasks({ status: 'in-progress' }),
+    countSheetTasks({ status: 'hold' }),
+    countSheetTasks({ status: 'cancelled' }),
     countSheetTasks({ createdAt: { $gte: startOfWeek() } }),
     countSheetTasks({ createdAt: { $gte: startOfMonth() } }),
     GoogleSheetTask.find()
@@ -97,10 +101,12 @@ const adminDashboard = asyncHandler(async (req, res) => {
       .sort({ updatedAt: -1 })
       .limit(5)
       .select('data status assignedTo rowNumber updatedAt createdAt'),
-    countTasks({ taskDate: today }),
+    countTasks({}),
     countTasks({ status: 'completed' }),
     countTasks({ status: 'pending' }),
     countTasks({ status: 'in-progress' }),
+    countTasks({ status: 'hold' }),
+    countTasks({ status: 'cancelled' }),
     countTasks({ status: { $in: ['pending', 'in-progress'] }, expectedCompletion: { $lt: new Date() } }),
     countTasks({ taskDate: { $gte: startOfWeek() } }),
     countTasks({ taskDate: { $gte: startOfMonth() } }),
@@ -118,8 +124,6 @@ const adminDashboard = asyncHandler(async (req, res) => {
     generatedBy: log.user?.name,
     createdAt: log.createdAt,
   }));
-
-  const manualTaskCount = completedCount + pendingCount + inProgressCount;
 
   const dashboardLatestTasks = [
     ...latestSheetTasks.map((task) => ({
@@ -144,6 +148,8 @@ const adminDashboard = asyncHandler(async (req, res) => {
     .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))
     .slice(0, 5);
 
+  const totalTasks = sheetTaskCount + manualTaskCount;
+
   res.json({
     success: true,
     data: {
@@ -152,14 +158,17 @@ const adminDashboard = asyncHandler(async (req, res) => {
         totalEmployees,
         departments: totalDepartments,
         teams: totalTeams,
-        todayTasks: sheetTodayCount + todayCount,
+        totalTasks,
+        sheetTasks: sheetTaskCount,
+        manualTasks: manualTaskCount,
         completed: sheetCompletedCount + completedCount,
         pending: sheetPendingCount + pendingCount,
         inProgress: sheetInProgressCount + inProgressCount,
+        hold: (sheetHoldCount || 0) + (holdCount || 0),
+        cancelled: (sheetCancelledCount || 0) + (cancelledCount || 0),
         late: lateCount,
         weekly: sheetWeeklyCount + weeklyCount,
         monthly: sheetMonthlyCount + monthlyCount,
-        totalTasks: sheetTaskCount + manualTaskCount,
       },
       recentActivity: { latestTasks: dashboardLatestTasks, latestLogins, latestReports },
     },
@@ -199,7 +208,7 @@ const employeeDashboard = asyncHandler(async (req, res) => {
     countTasks(manualFilter),
     countTasks({ ...manualFilter, taskDate: today }),
     countTasks({ ...manualFilter, status: 'completed' }),
-    countTasks({ ...manualFilter, status: { $in: pendingManualStatuses } }),
+    countTasks({ ...manualFilter, status: 'pending' }),
     countTasks({ ...manualFilter, status: 'in-progress' }),
     countTasks({
       ...manualFilter,

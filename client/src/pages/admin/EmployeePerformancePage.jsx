@@ -1,10 +1,8 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { FiArrowLeft } from 'react-icons/fi';
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { PageHeader, Card, Button, Spinner, StatCard } from '../../components/ui';
+import { FiArrowLeft, FiCheckCircle, FiClock, FiTrendingUp, FiAward } from 'react-icons/fi';
+import { PageHeader, Button, Spinner, StatCard } from '../../components/ui';
 import { getUserPerformance, getUser } from '../../api/users';
-import { FiCheckCircle, FiClock, FiTrendingUp, FiAward } from 'react-icons/fi';
 
 export default function EmployeePerformancePage() {
   const { id } = useParams();
@@ -30,6 +28,10 @@ export default function EmployeePerformancePage() {
     );
   }
 
+  const completionRate = performance?.totalTasks
+    ? Math.round((performance.completed / performance.totalTasks) * 100)
+    : 0;
+
   return (
     <div>
       <PageHeader
@@ -43,23 +45,18 @@ export default function EmployeePerformancePage() {
       />
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard label="Tasks Completed" value={performance?.tasksCompleted ?? 0} icon={FiCheckCircle} color="green" />
-        <StatCard label="Avg. Completion Time" value={performance?.avgCompletionTime ?? '—'} icon={FiClock} color="blue" />
-        <StatCard label="Completion Rate" value={performance?.completionRate ? `${performance.completionRate}%` : '—'} icon={FiTrendingUp} color="indigo" />
-        <StatCard label="Rank" value={performance?.rank ?? '—'} icon={FiAward} color="yellow" />
+        <StatCard label="Tasks Completed" value={performance?.completed ?? 0} icon={FiCheckCircle} color="green" />
+        <StatCard label="Avg. Hours" value={performance?.avgHours ?? '—'} icon={FiClock} color="blue" />
+        <StatCard label="Completion Rate" value={`${completionRate}%`} icon={FiTrendingUp} color="indigo" />
+        <StatCard label="Total Tasks" value={performance?.totalTasks ?? 0} icon={FiAward} color="yellow" />
       </div>
 
-      <Card title="Performance Trend" className="mt-6">
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={performance?.trend || []} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#64748b' }} />
-            <YAxis tick={{ fontSize: 12, fill: '#64748b' }} />
-            <Tooltip contentStyle={{ borderRadius: 8, borderColor: '#e2e8f0', fontSize: 12 }} />
-            <Line type="monotone" dataKey="completed" stroke="#4f46e5" strokeWidth={2} name="Completed" />
-          </LineChart>
-        </ResponsiveContainer>
-      </Card>
+      <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <StatCard label="Pending" value={performance?.pending ?? 0} icon={FiClock} color="yellow" />
+        <StatCard label="In Progress" value={performance?.inProgress ?? 0} icon={FiClock} color="blue" />
+        <StatCard label="On Hold" value={performance?.hold ?? 0} icon={FiClock} color="orange" />
+        <StatCard label="Total Hours" value={performance?.totalHours ?? 0} icon={FiClock} color="slate" />
+      </div>
     </div>
   );
 }

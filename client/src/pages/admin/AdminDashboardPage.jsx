@@ -7,6 +7,8 @@ import {
   FiTrendingUp,
   FiTrendingDown,
   FiBriefcase,
+  FiXCircle,
+  FiPauseCircle,
 } from 'react-icons/fi';
 import { PageHeader, StatCard, Card, Badge, statusColor } from '../../components/ui';
 import TopPerformersChart from '../../components/charts/TopPerformersChart';
@@ -53,8 +55,8 @@ export default function AdminDashboardPage() {
     { label: 'Completed', value: cards.completed, icon: FiCheckCircle, color: 'green' },
     { label: 'Pending', value: cards.pending, icon: FiClock, color: 'yellow' },
     { label: 'In Progress', value: cards.inProgress, icon: FiLoader, color: 'purple' },
-    { label: 'Weekly', value: cards.weekly, icon: FiTrendingUp, color: 'indigo' },
-    { label: 'Monthly', value: cards.monthly, icon: FiTrendingDown, color: 'orange' },
+    { label: 'On Hold', value: cards.hold, icon: FiPauseCircle, color: 'orange' },
+    { label: 'Cancelled', value: cards.cancelled, icon: FiXCircle, color: 'red' },
     { label: 'Departments', value: cards.departments, icon: FiBriefcase, color: 'slate' },
   ];
 

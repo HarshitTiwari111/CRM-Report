@@ -20,4 +20,7 @@ export const assignUser = (id, payload) => axiosInstance.patch(`/users/${id}/ass
 
 export const getUserPerformance = (id) => axiosInstance.get(`/users/${id}/performance`);
 
-export const updateMyProfile = (payload) => axiosInstance.put('/users/me/profile', payload);
+export const updateMyProfile = (formData) =>
+  axiosInstance.put('/users/me/profile', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
