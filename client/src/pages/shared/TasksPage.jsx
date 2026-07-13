@@ -7,7 +7,7 @@ import {
   FiRefreshCw, FiTrash2, FiAlertTriangle, FiLink,
   FiSearch, FiGlobe, FiLock, FiCopy, FiCheckCircle, FiGrid,
   FiClock, FiUser, FiTag, FiX, FiSettings,
-  FiPlus, FiEdit2,
+  FiPlus, FiEdit2, FiPaperclip,
 } from 'react-icons/fi';
 import {
   PageHeader, Button, Input, ConfirmDialog, Card,
@@ -245,6 +245,9 @@ function TaskTable({
               <th className="text-left font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide text-xs px-4 py-3 whitespace-nowrap min-w-[150px]">
                 Progress
               </th>
+              <th className="text-left font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide text-xs px-4 py-3 whitespace-nowrap min-w-[140px]">
+                Attachments
+              </th>
               <th className="text-left font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide text-xs px-4 py-3 whitespace-nowrap min-w-[190px]">
                 Task Assign
               </th>
@@ -300,6 +303,28 @@ function TaskTable({
                   </td>
                   <td className="px-4 py-3">
                     <ProgressMini value={row.progress} />
+                  </td>
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    {row._raw?.attachments?.length > 0 ? (
+                      <div className="flex flex-col gap-1">
+                        {row._raw.attachments.map((att, i) => (
+                          <a
+                            key={i}
+                            href={`${(import.meta.env.VITE_API_URL || '').replace(/\/api$/, '')}${att.url}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            download={att.name}
+                            className="inline-flex items-center gap-1 text-xs text-primary-600 dark:text-primary-400 hover:underline truncate max-w-[130px]"
+                            title={att.name}
+                          >
+                            <FiPaperclip className="h-3 w-3 flex-shrink-0" />
+                            <span className="truncate">{att.name}</span>
+                          </a>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-300 dark:text-slate-600">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-1.5">
