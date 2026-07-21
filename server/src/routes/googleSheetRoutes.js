@@ -6,6 +6,7 @@ const { syncSingleSheet, upsertSheetTasks } = require('../utils/googleSyncServic
 const { protect } = require('../middleware/auth');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
+const { isAdminLevel } = require('../utils/roles');
 
 const router = express.Router();
 
@@ -91,8 +92,8 @@ router.get(
 router.post(
   '/',
   asyncHandler(async (req, res) => {
-    if (req.user.role !== 'superadmin') {
-      throw new ApiError(403, 'Access denied. Superadmins only.');
+    if (!isAdminLevel(req.user.role)) {
+      throw new ApiError(403, 'Access denied. Admins only.');
     }
 
     const { url, name, syncMode } = req.body;
@@ -168,7 +169,7 @@ router.get(
 
     const filter = { config: config._id };
 
-    if (req.user.role === 'employee') {
+    if (!isAdminLevel(req.user.role)) {
       if (view === 'available') {
         filter.assignedTo = null;
       } else if (view === 'mine') {
@@ -227,7 +228,7 @@ router.get(
 router.patch(
   '/tasks/:taskId/self-assign',
   asyncHandler(async (req, res) => {
-    if (req.user.role !== 'employee') {
+    if (isAdminLevel(req.user.role)) {
       throw new ApiError(403, 'Only employees can self-assign tasks');
     }
 
@@ -263,8 +264,8 @@ router.patch(
 router.patch(
   '/tasks/:taskId/assign',
   asyncHandler(async (req, res) => {
-    if (req.user.role !== 'superadmin') {
-      throw new ApiError(403, 'Access denied. Superadmins only.');
+    if (!isAdminLevel(req.user.role)) {
+      throw new ApiError(403, 'Access denied. Admins only.');
     }
 
     const { employeeId } = req.body;
@@ -272,7 +273,7 @@ router.patch(
       throw new ApiError(400, 'Employee is required');
     }
 
-    const employee = await User.findOne({ _id: employeeId, role: 'employee', isActive: true });
+    const employee = await User.findOne({ _id: employeeId, role: { $in: ['employee', 'manager'] }, isActive: true });
     if (!employee) {
       throw new ApiError(404, 'Employee not found');
     }
@@ -311,15 +312,13 @@ router.patch(
       throw new ApiError(404, 'Task not found');
     }
 
-    if (req.user.role === 'employee') {
+    if (!isAdminLevel(req.user.role)) {
       if (!task.assignedTo || !task.assignedTo.equals(req.user._id)) {
         throw new ApiError(403, 'You can only release tasks assigned to you');
       }
       if (task.assignmentSource !== 'employee') {
         throw new ApiError(403, 'Admin-assigned tasks can only be changed by an admin');
       }
-    } else if (req.user.role !== 'superadmin') {
-      throw new ApiError(403, 'Access denied');
     }
 
     task.assignedTo = null;
@@ -349,7 +348,7 @@ router.patch(
       throw new ApiError(404, 'Task not found');
     }
 
-    if (req.user.role === 'employee' && !canEmployeeManageSheetTask(task, req.user._id)) {
+    if (!isAdminLevel(req.user.role) && !canEmployeeManageSheetTask(task, req.user._id)) {
       throw new ApiError(403, 'You can only edit available tasks or tasks assigned to you');
     }
 
@@ -384,7 +383,7 @@ router.delete(
       throw new ApiError(404, 'Task not found');
     }
 
-    if (req.user.role === 'employee' && !canEmployeeManageSheetTask(task, req.user._id)) {
+    if (!isAdminLevel(req.user.role) && !canEmployeeManageSheetTask(task, req.user._id)) {
       throw new ApiError(403, 'You can only delete available tasks or tasks assigned to you');
     }
 
@@ -418,7 +417,7 @@ router.patch(
       throw new ApiError(400, 'Task must be assigned before progress can be updated');
     }
 
-    if (req.user.role === 'employee' && !task.assignedTo.equals(req.user._id)) {
+    if (!isAdminLevel(req.user.role) && !task.assignedTo.equals(req.user._id)) {
       throw new ApiError(403, 'You can only update your own assigned tasks');
     }
 
@@ -444,8 +443,8 @@ router.patch(
 router.delete(
   '/:id',
   asyncHandler(async (req, res) => {
-    if (req.user.role !== 'superadmin') {
-      throw new ApiError(403, 'Access denied. Superadmins only.');
+    if (!isAdminLevel(req.user.role)) {
+      throw new ApiError(403, 'Access denied. Admins only.');
     }
 
     const config = await GoogleSheetConfig.findById(req.params.id);

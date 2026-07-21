@@ -5,6 +5,15 @@ const GoogleSheetTask = require('../models/GoogleSheetTask');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { logActivity } = require('../utils/activityLogger');
+const { isAdminLevel, canManageRole } = require('../utils/roles');
+
+// Privilege-escalation guard: an actor may only manage accounts whose role is
+// strictly below their own (superadmin manages everyone).
+const assertCanManage = (actor, targetRole) => {
+  if (!canManageRole(actor.role, targetRole)) {
+    throw new ApiError(403, `You do not have permission to manage a '${targetRole}' account`);
+  }
+};
 
 const sanitizeUser = (user) => {
   const obj = user.toObject ? user.toObject() : user;
@@ -55,12 +64,14 @@ const listUsers = asyncHandler(async (req, res) => {
 const createUser = asyncHandler(async (req, res) => {
   const { name, email, password, phone, department, designation, manager, joiningDate, role } = req.body;
 
+  assertCanManage(req.user, role || 'employee');
+
   const existing = await User.findOne({ email: email.toLowerCase() });
   if (existing) {
     throw new ApiError(409, 'A user with this email already exists');
   }
 
-  const passwordHash = await bcrypt.hash(password, 10);
+  const passwordHash = await bcrypt.hash(password, 12);
 
   const user = await User.create({
     name,
@@ -102,6 +113,11 @@ const updateUser = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'User not found');
   }
 
+  assertCanManage(req.user, user.role);
+  if (role !== undefined) {
+    assertCanManage(req.user, role);
+  }
+
   if (email && email.toLowerCase() !== user.email) {
     const existing = await User.findOne({ email: email.toLowerCase() });
     if (existing) {
@@ -136,6 +152,8 @@ const deleteUser = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'You cannot delete your own account');
   }
 
+  assertCanManage(req.user, user.role);
+
   await user.deleteOne();
 
   await logActivity(req.user._id, 'delete-user', { targetUser: req.params.id }, req.ip);
@@ -151,6 +169,8 @@ const setUserStatus = asyncHandler(async (req, res) => {
   if (!user) {
     throw new ApiError(404, 'User not found');
   }
+
+  assertCanManage(req.user, user.role);
 
   user.isActive = isActive;
   await user.save();
@@ -169,7 +189,9 @@ const adminResetPassword = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'User not found');
   }
 
-  user.passwordHash = await bcrypt.hash(newPassword, 10);
+  assertCanManage(req.user, user.role);
+
+  user.passwordHash = await bcrypt.hash(newPassword, 12);
   await user.save();
 
   await logActivity(req.user._id, 'admin-reset-password', { targetUser: user._id.toString() }, req.ip);
@@ -186,6 +208,8 @@ const assignUser = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'User not found');
   }
 
+  assertCanManage(req.user, user.role);
+
   if (department !== undefined) user.department = department || undefined;
   if (team !== undefined) user.team = team || undefined;
   if (manager !== undefined) user.manager = manager || undefined;
@@ -201,7 +225,7 @@ const assignUser = asyncHandler(async (req, res) => {
 const getUserPerformance = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  if (req.user.role === 'employee' && req.user._id.toString() !== id) {
+  if (!isAdminLevel(req.user.role) && req.user._id.toString() !== id) {
     throw new ApiError(403, 'You can only view your own performance summary');
   }
 

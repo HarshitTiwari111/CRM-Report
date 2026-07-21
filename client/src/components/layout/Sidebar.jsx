@@ -55,8 +55,8 @@ function NavItem({ item, onNavigate }) {
 export default function Sidebar() {
   const dispatch = useDispatch();
   const sidebarOpen = useSelector((state) => state.ui.sidebarOpen);
-  const { isSuperAdmin } = useAuth();
-  const nav = isSuperAdmin ? adminNav : employeeNav;
+  const { isAdminLevel } = useAuth();
+  const nav = isAdminLevel ? adminNav : employeeNav;
 
   const content = (
     <div className="flex h-full flex-col">

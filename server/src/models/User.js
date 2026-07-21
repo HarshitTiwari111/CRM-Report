@@ -30,7 +30,7 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['superadmin', 'employee'],
+      enum: ['superadmin', 'admin', 'manager', 'employee'],
       default: 'employee',
     },
     department: {
@@ -62,6 +62,45 @@ const userSchema = new mongoose.Schema(
     },
     lastLogin: {
       type: Date,
+    },
+    // Brute-force protection
+    failedLoginAttempts: {
+      type: Number,
+      default: 0,
+      select: false,
+    },
+    lockUntil: {
+      type: Date,
+      select: false,
+    },
+    // TOTP two-factor authentication
+    twoFactorEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    twoFactorSecret: {
+      type: String,
+      select: false,
+    },
+    // Secret generated during setup, promoted to twoFactorSecret once verified
+    twoFactorPendingSecret: {
+      type: String,
+      select: false,
+    },
+    // Devices this user has logged in from (for new-device alerts)
+    knownDevices: {
+      type: [
+        {
+          _id: false,
+          deviceHash: String,
+          userAgent: String,
+          ip: String,
+          firstSeen: Date,
+          lastSeen: Date,
+        },
+      ],
+      default: [],
+      select: false,
     },
   },
   { timestamps: true }

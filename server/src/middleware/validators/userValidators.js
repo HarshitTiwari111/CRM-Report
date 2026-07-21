@@ -9,7 +9,7 @@ const createUserValidator = [
   body('designation').optional().isString(),
   body('manager').optional({ checkFalsy: true }).isMongoId().withMessage('Invalid manager id'),
   body('joiningDate').optional().isISO8601().withMessage('Invalid joining date'),
-  body('role').optional().isIn(['superadmin', 'employee']).withMessage('Invalid role'),
+  body('role').optional().isIn(['superadmin', 'admin', 'manager', 'employee']).withMessage('Invalid role'),
 ];
 
 const updateUserValidator = [

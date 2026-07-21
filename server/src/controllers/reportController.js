@@ -5,6 +5,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const { generateTaskReportPDF } = require('../utils/pdfGenerator');
 const { generateTaskExcel, generateTaskCSV } = require('../utils/excelGenerator');
 const { logActivity } = require('../utils/activityLogger');
+const { isAdminLevel } = require('../utils/roles');
 
 const getSheetTaskTitle = (task) => {
   const entries = task.data instanceof Map ? Array.from(task.data.entries()) : Object.entries(task.data || {});
@@ -28,7 +29,7 @@ const buildFilter = (req) => {
 
   const filter = { isArchived: { $ne: true } };
 
-  if (req.user.role === 'employee') {
+  if (!isAdminLevel(req.user.role)) {
     filter.assignedTo = req.user._id;
   } else if (employeeId) {
     filter.assignedTo = employeeId;
@@ -59,7 +60,7 @@ const fetchSheetTasks = async (req) => {
   const { employeeId, status, dateFrom, dateTo } = req.query;
   const filter = {};
 
-  if (req.user.role === 'employee') {
+  if (!isAdminLevel(req.user.role)) {
     filter.assignedTo = req.user._id;
   } else if (employeeId) {
     filter.assignedTo = employeeId;

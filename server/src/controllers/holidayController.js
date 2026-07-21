@@ -4,6 +4,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { logActivity } = require('../utils/activityLogger');
 const { getPagination, buildMeta } = require('../utils/pagination');
+const { isAdminLevel } = require('../utils/roles');
 
 // GET /holidays
 const listHolidays = asyncHandler(async (req, res) => {
@@ -52,7 +53,7 @@ const getCalendar = asyncHandler(async (req, res) => {
   const taskFilter = {
     expectedCompletion: { $gte: start, $lte: end },
   };
-  if (req.user.role === 'employee') {
+  if (!isAdminLevel(req.user.role)) {
     taskFilter.assignedTo = req.user._id;
   }
 

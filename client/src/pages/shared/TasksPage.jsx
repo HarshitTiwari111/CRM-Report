@@ -672,7 +672,7 @@ function TaskFormModal({ task, headers, onClose, onSubmit, isLoading }) {
 function ConfigModal({
   config,
   isPushMode,
-  isSuperAdmin,
+  isAdminLevel,
   onClose,
   onSync,
   isSyncing,
@@ -736,7 +736,7 @@ function ConfigModal({
                   Sync Now
                 </Button>
               )}
-              {isSuperAdmin && (
+              {isAdminLevel && (
                 <Button variant="danger" icon={FiTrash2} onClick={onDisconnect}>
                   Disconnect
                 </Button>
@@ -779,7 +779,7 @@ function ConfigModal({
    Main page component
 ──────────────────────────────────────────────────────────────────────────── */
 export default function TasksPage() {
-  const { isSuperAdmin, isEmployee, user } = useAuth();
+  const { isAdminLevel, isEmployee, user } = useAuth();
   const queryClient = useQueryClient();
 
   const [page, setPage] = useState(1);
@@ -822,7 +822,7 @@ export default function TasksPage() {
   const { data: usersRes } = useQuery({
     queryKey: ['users', 'employees-for-task-assign'],
     queryFn: () => getUsers({ role: 'employee', status: 'active', limit: 500 }),
-    enabled: isSuperAdmin,
+    enabled: isAdminLevel,
   });
   const employees = usersRes?.data?.data || [];
 
@@ -835,7 +835,7 @@ export default function TasksPage() {
       employee: employeeFilter || undefined,
       status: statusFilter || undefined,
     }),
-    enabled: Boolean(config?._id) && isSuperAdmin,
+    enabled: Boolean(config?._id) && isAdminLevel,
     keepPreviousData: true,
     refetchInterval: 15000,
   });
@@ -853,7 +853,7 @@ export default function TasksPage() {
       sortBy: 'createdAt',
       sortOrder: 'desc',
     }),
-    enabled: Boolean(config?._id) && isSuperAdmin,
+    enabled: Boolean(config?._id) && isAdminLevel,
     keepPreviousData: true,
     refetchInterval: 15000,
   });
@@ -1131,7 +1131,7 @@ export default function TasksPage() {
             </p>
           </div>
 
-          {isSuperAdmin ? (
+          {isAdminLevel ? (
             <form onSubmit={handleConnect} className="mt-4 flex flex-col gap-4">
               <div>
                 <label className="text-sm font-medium text-slate-700 dark:text-slate-300 block mb-2">Sheet Access Type</label>
@@ -1189,7 +1189,7 @@ export default function TasksPage() {
               containerClassName="w-full sm:w-80"
               icon={FiSearch}
             />
-            {isSuperAdmin && (
+            {isAdminLevel && (
               <>
                 <Select
                   value={employeeFilter}
@@ -1239,7 +1239,7 @@ export default function TasksPage() {
               </div>
             )}
             <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">
-              {isSuperAdmin
+              {isAdminLevel
                 ? `${totalTasks} task${totalTasks !== 1 ? 's' : ''}`
                 : `${employeeTotalTasks} in pool (${assignedManualRows} assigned · ${availableManualRows + availableTasks.length} available)`}
               {' · '}click a row to view full details
@@ -1347,7 +1347,7 @@ export default function TasksPage() {
         <ConfigModal
           config={config}
           isPushMode={isPushMode}
-          isSuperAdmin={isSuperAdmin}
+          isAdminLevel={isAdminLevel}
           onClose={() => setShowConfigModal(false)}
           onSync={() => syncMutation.mutate()}
           isSyncing={syncMutation.isPending || tasksFetching}

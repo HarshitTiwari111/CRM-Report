@@ -21,6 +21,10 @@ services:
         value: 7d
       - key: CLIENT_URL
         sync: false
+      # Client and API run on different origins in this setup, so the HttpOnly
+      # refresh cookie must be SameSite=None (it is always Secure in production)
+      - key: COOKIE_SAMESITE
+        value: none
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT

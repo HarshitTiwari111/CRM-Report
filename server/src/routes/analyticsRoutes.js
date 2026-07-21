@@ -10,7 +10,7 @@ const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
-router.use(protect, authorize('superadmin'));
+router.use(protect, authorize('superadmin', 'admin'));
 
 router.get('/productivity', productivity);
 router.get('/department-performance', departmentPerformance);

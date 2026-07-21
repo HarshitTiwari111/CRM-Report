@@ -19,9 +19,144 @@ import { PageHeader, Card, Input, Button, FileInput, Badge } from '../../compone
 import { profileSchema } from '../../schemas/profileSchemas';
 import { changePasswordSchema } from '../../schemas/authSchemas';
 import { updateMyProfile } from '../../api/users';
-import { changePassword } from '../../api/auth';
+import { changePassword, setupTwoFactor, enableTwoFactor, disableTwoFactor } from '../../api/auth';
 import { useAuth } from '../../hooks/useAuth';
-import { updateUser as updateUserAction } from '../../features/auth/authSlice';
+import { updateUser as updateUserAction, setCredentials as setCredentialsAction } from '../../features/auth/authSlice';
+import { isAdminRole, ROLE_LABELS } from '../../utils/constants';
+
+function TwoFactorCard({ user, dispatch }) {
+  const [setup, setSetup] = useState(null); // { qrDataUrl, secret }
+  const [code, setCode] = useState('');
+  const [disablePassword, setDisablePassword] = useState('');
+  const [disableCode, setDisableCode] = useState('');
+
+  const setupMutation = useMutation({
+    mutationFn: setupTwoFactor,
+    onSuccess: ({ data }) => setSetup(data.data),
+    onError: (error) => toast.error(error.response?.data?.message || 'Could not start 2FA setup'),
+  });
+
+  const enableMutation = useMutation({
+    mutationFn: () => enableTwoFactor(code.trim()),
+    onSuccess: () => {
+      toast.success('Two-factor authentication enabled');
+      dispatch(updateUserAction({ twoFactorEnabled: true }));
+      setSetup(null);
+      setCode('');
+    },
+    onError: (error) => toast.error(error.response?.data?.message || 'Invalid code'),
+  });
+
+  const disableMutation = useMutation({
+    mutationFn: () => disableTwoFactor({ password: disablePassword, code: disableCode.trim() }),
+    onSuccess: () => {
+      toast.success('Two-factor authentication disabled');
+      dispatch(updateUserAction({ twoFactorEnabled: false }));
+      setDisablePassword('');
+      setDisableCode('');
+    },
+    onError: (error) => toast.error(error.response?.data?.message || 'Could not disable 2FA'),
+  });
+
+  return (
+    <Card
+      title="Two-Factor Authentication (2FA)"
+      actions={<FiShield className="h-4 w-4 text-slate-400 dark:text-slate-500" />}
+    >
+      {user?.twoFactorEnabled ? (
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center gap-2">
+            <Badge color="green">Enabled</Badge>
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+              Your account requires an authenticator code at sign-in.
+            </p>
+          </div>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              disableMutation.mutate();
+            }}
+            className="flex flex-col gap-4"
+          >
+            <Input
+              label="Current Password"
+              type="password"
+              autoComplete="current-password"
+              value={disablePassword}
+              onChange={(e) => setDisablePassword(e.target.value)}
+            />
+            <Input
+              label="Authentication Code"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="123456"
+              value={disableCode}
+              onChange={(e) => setDisableCode(e.target.value.replace(/\D/g, ''))}
+            />
+            <div className="flex justify-end border-t border-slate-100 pt-4 dark:border-slate-700">
+              <Button type="submit" variant="danger" isLoading={disableMutation.isPending}>
+                Disable 2FA
+              </Button>
+            </div>
+          </form>
+        </div>
+      ) : setup ? (
+        <div className="flex flex-col gap-4">
+          <p className="text-xs text-slate-400 dark:text-slate-500">
+            Scan this QR code with Google Authenticator, Authy or a similar app, then enter the
+            6-digit code to confirm.
+          </p>
+          <div className="flex justify-center">
+            <img src={setup.qrDataUrl} alt="2FA QR code" className="h-44 w-44 rounded-lg border border-slate-200 bg-white p-2 dark:border-slate-700" />
+          </div>
+          <p className="break-all text-center text-xs text-slate-400 dark:text-slate-500">
+            Manual key: <span className="font-mono">{setup.secret}</span>
+          </p>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (code.trim().length !== 6) {
+                toast.error('Enter the 6-digit code');
+                return;
+              }
+              enableMutation.mutate();
+            }}
+            className="flex flex-col gap-4"
+          >
+            <Input
+              label="Authentication Code"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="123456"
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+            />
+            <div className="flex justify-end gap-2 border-t border-slate-100 pt-4 dark:border-slate-700">
+              <Button type="button" variant="secondary" onClick={() => setSetup(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" isLoading={enableMutation.isPending}>
+                Verify & Enable
+              </Button>
+            </div>
+          </form>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          <p className="-mt-2 text-xs text-slate-400 dark:text-slate-500">
+            Add an extra layer of protection to your account. Strongly recommended for admin
+            accounts — even if your password leaks, nobody can sign in without your phone.
+          </p>
+          <div className="flex justify-end border-t border-slate-100 pt-4 dark:border-slate-700">
+            <Button type="button" onClick={() => setupMutation.mutate()} isLoading={setupMutation.isPending}>
+              Enable 2FA
+            </Button>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
 
 function InfoRow({ icon: Icon, label, value }) {
   return (
@@ -72,8 +207,12 @@ export default function ProfilePage() {
 
   const passwordMutation = useMutation({
     mutationFn: ({ oldPassword, newPassword }) => changePassword({ oldPassword, newPassword }),
-    onSuccess: () => {
+    onSuccess: ({ data }) => {
       toast.success('Password changed successfully');
+      // Server revoked all other sessions and issued this one fresh
+      if (data.data?.accessToken) {
+        dispatch(setCredentialsAction({ accessToken: data.data.accessToken }));
+      }
       resetPassword();
     },
     onError: (error) => toast.error(error.response?.data?.message || 'Failed to change password'),
@@ -110,9 +249,9 @@ export default function ProfilePage() {
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">{user?.name}</h2>
-                <Badge color={user?.role === 'superadmin' ? 'purple' : 'indigo'} className="flex items-center gap-1">
+                <Badge color={isAdminRole(user?.role) ? 'purple' : 'indigo'} className="flex items-center gap-1">
                   <FiShield className="h-3 w-3" />
-                  {user?.role === 'superadmin' ? 'Super Admin' : 'Employee'}
+                  {ROLE_LABELS[user?.role] || 'Employee'}
                 </Badge>
               </div>
               <p className="text-sm text-slate-500 dark:text-slate-400">{user?.email}</p>
@@ -201,6 +340,8 @@ export default function ProfilePage() {
             </div>
           </form>
         </Card>
+
+        <TwoFactorCard user={user} dispatch={dispatch} />
       </div>
     </div>
   );

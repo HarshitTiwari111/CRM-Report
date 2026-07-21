@@ -17,7 +17,32 @@ const generateRefreshToken = (user) => {
   );
 };
 
-const verifyAccessToken = (token) => jwt.verify(token, process.env.JWT_SECRET);
+// Short-lived token issued after password check when 2FA is still pending.
+// It only grants the right to call /auth/2fa/verify-login — never API access.
+const generateTwoFactorTempToken = (user) => {
+  return jwt.sign(
+    { id: user._id.toString(), purpose: '2fa-pending' },
+    process.env.JWT_SECRET,
+    { expiresIn: '5m' }
+  );
+};
+
+const verifyTwoFactorTempToken = (token) => {
+  const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  if (decoded.purpose !== '2fa-pending') {
+    throw new Error('Invalid token purpose');
+  }
+  return decoded;
+};
+
+const verifyAccessToken = (token) => {
+  const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  // A 2FA-pending token must never be accepted as an access token
+  if (decoded.purpose) {
+    throw new Error('Invalid token purpose');
+  }
+  return decoded;
+};
 
 const verifyRefreshToken = (token) => jwt.verify(token, process.env.JWT_REFRESH_SECRET);
 
@@ -35,6 +60,8 @@ const msFromExpiry = (expiry) => {
 module.exports = {
   generateAccessToken,
   generateRefreshToken,
+  generateTwoFactorTempToken,
+  verifyTwoFactorTempToken,
   verifyAccessToken,
   verifyRefreshToken,
   hashToken,

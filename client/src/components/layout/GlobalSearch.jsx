@@ -9,12 +9,12 @@ import { useAuth } from '../../hooks/useAuth';
 export default function GlobalSearch() {
   const [query, setQuery] = useState('');
   const navigate = useNavigate();
-  const { isSuperAdmin } = useAuth();
+  const { isAdminLevel } = useAuth();
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!query.trim()) return;
-    const base = isSuperAdmin ? '/admin/tasks' : '/employee/tasks';
+    const base = isAdminLevel ? '/admin/tasks' : '/employee/tasks';
     navigate(`${base}?search=${encodeURIComponent(query.trim())}`);
   };
 

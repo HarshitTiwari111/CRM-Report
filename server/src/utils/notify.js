@@ -18,7 +18,7 @@ const notifyManagersAndAdmins = async ({ employee, title, message, type = 'task'
     recipients.add(employee.manager.toString());
   }
 
-  const admins = await User.find({ role: 'superadmin', isActive: true }).select('_id');
+  const admins = await User.find({ role: { $in: ['superadmin', 'admin'] }, isActive: true }).select('_id');
   admins.forEach((admin) => recipients.add(admin._id.toString()));
 
   const jobs = Array.from(recipients).map((userId) =>

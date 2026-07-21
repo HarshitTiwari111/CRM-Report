@@ -174,7 +174,7 @@ function DetailDrawer({ update, isAdmin, onClose, onEdit, onDelete, isDeleting }
 /* Main page                                                                  */
 /* -------------------------------------------------------------------------- */
 export default function DailyUpdatesPage() {
-  const { isSuperAdmin, user } = useAuth();
+  const { isAdminLevel, user } = useAuth();
   const queryClient = useQueryClient();
 
   const [page, setPage] = useState(1);
@@ -194,7 +194,7 @@ export default function DailyUpdatesPage() {
   const { data: employeesRes } = useQuery({
     queryKey: ['daily-updates', 'employees'],
     queryFn: () => getUsers({ role: 'employee', status: 'active', limit: 500 }),
-    enabled: isSuperAdmin,
+    enabled: isAdminLevel,
   });
 
   const employees = employeesRes?.data?.data || [];
@@ -204,11 +204,11 @@ export default function DailyUpdatesPage() {
       page,
       limit: PAGE_SIZE,
       search: search || undefined,
-      employeeId: isSuperAdmin ? employeeFilter || undefined : undefined,
+      employeeId: isAdminLevel ? employeeFilter || undefined : undefined,
       dateFrom: dateFrom || undefined,
       dateTo: dateTo || undefined,
     }),
-    [page, search, isSuperAdmin, employeeFilter, dateFrom, dateTo]
+    [page, search, isAdminLevel, employeeFilter, dateFrom, dateTo]
   );
 
   const { data: updatesRes, isLoading, isFetching } = useQuery({
@@ -316,12 +316,12 @@ export default function DailyUpdatesPage() {
         <PageHeader
           title="Daily Updates"
           subtitle={
-            isSuperAdmin
+            isAdminLevel
               ? 'Track what each employee worked on, day by day.'
               : 'Add your daily work items and review your history.'
           }
         />
-        {!isSuperAdmin && (
+        {!isAdminLevel && (
           <Button icon={FiPlus} onClick={openCreateModal} className="shrink-0">
             Add Update
           </Button>
@@ -329,7 +329,7 @@ export default function DailyUpdatesPage() {
       </div>
 
       {/* Submit / Edit form lives in a modal */}
-      {!isSuperAdmin && (
+      {!isAdminLevel && (
         <Modal
           open={showFormModal}
           onClose={() => {
@@ -402,7 +402,7 @@ export default function DailyUpdatesPage() {
           />
         </div>
 
-        {isSuperAdmin ? (
+        {isAdminLevel ? (
           <div className="w-full sm:w-56">
             <Select
               placeholder="All employees"
@@ -510,7 +510,7 @@ export default function DailyUpdatesPage() {
             <table className="w-full min-w-[640px] border-collapse text-left text-sm">
               <thead className="sticky top-0 z-[1] bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-400">
                 <tr>
-                  {isSuperAdmin && <th className="px-5 py-3">Employee</th>}
+                  {isAdminLevel && <th className="px-5 py-3">Employee</th>}
                   <th className="px-5 py-3">Date</th>
                   <th className="px-5 py-3">Work Items</th>
                   <th className="px-5 py-3">Notes</th>
@@ -530,7 +530,7 @@ export default function DailyUpdatesPage() {
                       onClick={() => setSelectedUpdate(update)}
                       className="cursor-pointer transition hover:bg-slate-50 dark:hover:bg-slate-700/30"
                     >
-                      {isSuperAdmin && (
+                      {isAdminLevel && (
                         <td className="px-5 py-3.5">
                           <div className="flex items-center gap-2">
                             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-100 text-[11px] font-semibold text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">
@@ -561,7 +561,7 @@ export default function DailyUpdatesPage() {
                         {update.notes || '-'}
                       </td>
                       <td className="px-5 py-3.5 text-right">
-                        {!isSuperAdmin ? (
+                        {!isAdminLevel ? (
                           <div className="flex items-center justify-end gap-1.5">
                             <button
                               type="button"
@@ -608,7 +608,7 @@ export default function DailyUpdatesPage() {
       {selectedUpdate && (
         <DetailDrawer
           update={selectedUpdate}
-          isAdmin={isSuperAdmin}
+          isAdmin={isAdminLevel}
           onClose={() => setSelectedUpdate(null)}
           onEdit={(u) => {
             setSelectedUpdate(null);

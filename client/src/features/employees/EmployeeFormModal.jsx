@@ -167,6 +167,8 @@ export default function EmployeeFormModal({ isOpen, onClose, employee }) {
               error={errors.role?.message}
               options={[
                 { value: ROLES.EMPLOYEE, label: 'Employee' },
+                { value: ROLES.MANAGER, label: 'Manager' },
+                { value: ROLES.ADMIN, label: 'Admin' },
                 { value: ROLES.SUPERADMIN, label: 'Super Admin' },
               ]}
               {...field}

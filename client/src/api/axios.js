@@ -8,6 +8,8 @@ const baseURL = import.meta.env.VITE_API_URL || '/api';
 
 const axiosInstance = axios.create({
   baseURL,
+  // Send the HttpOnly refresh cookie on auth endpoints
+  withCredentials: true,
 });
 
 axiosInstance.interceptors.request.use((config) => {
@@ -27,6 +29,22 @@ function processQueue(error, token) {
     else resolve(token);
   });
   refreshQueue = [];
+}
+
+// The refresh token travels in an HttpOnly cookie — no body payload needed.
+// Concurrent callers share one request: tokens are rotated server-side, so two
+// parallel refreshes with the same cookie would invalidate the session.
+let refreshPromise = null;
+export function refreshSession() {
+  if (!refreshPromise) {
+    refreshPromise = axios
+      .post(`${baseURL}/auth/refresh`, {}, { withCredentials: true })
+      .then(({ data }) => data.data.accessToken)
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
 }
 
 axiosInstance.interceptors.response.use(
@@ -50,17 +68,8 @@ axiosInstance.interceptors.response.use(
       originalRequest._retry = true;
       isRefreshing = true;
 
-      const refreshToken = store.getState().auth.refreshToken;
-
-      if (!refreshToken) {
-        store.dispatch(logout());
-        isRefreshing = false;
-        return Promise.reject(error);
-      }
-
       try {
-        const { data } = await axios.post(`${baseURL}/auth/refresh`, { refreshToken });
-        const newAccessToken = data.data.accessToken;
+        const newAccessToken = await refreshSession();
 
         store.dispatch(setCredentials({ accessToken: newAccessToken }));
         processQueue(null, newAccessToken);

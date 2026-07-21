@@ -23,7 +23,7 @@ function toDateInput(value) {
 
 export default function TaskFormModal({ isOpen, onClose, task, prefill }) {
   const isEdit = Boolean(task);
-  const { isSuperAdmin } = useAuth();
+  const { isAdminLevel } = useAuth();
   const queryClient = useQueryClient();
 
   const { data: projects } = useQuery({
@@ -42,7 +42,7 @@ export default function TaskFormModal({ isOpen, onClose, task, prefill }) {
     queryKey: ['users', 'all-employees'],
     queryFn: () => getUsers({ limit: 200 }),
     select: (res) => res.data.data,
-    enabled: isOpen && isSuperAdmin,
+    enabled: isOpen && isAdminLevel,
   });
 
   const defaultValues = useMemo(
@@ -152,7 +152,7 @@ export default function TaskFormModal({ isOpen, onClose, task, prefill }) {
           )}
         />
 
-        {isSuperAdmin && (
+        {isAdminLevel && (
           <Controller
             control={control}
             name="assignedTo"

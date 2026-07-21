@@ -2,6 +2,7 @@ const DailyUpdate = require('../models/DailyUpdate');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { logActivity } = require('../utils/activityLogger');
+const { isAdminLevel } = require('../utils/roles');
 
 const normalizeWorkDate = (value) => {
   const date = value ? new Date(value) : new Date();
@@ -20,7 +21,7 @@ const listDailyUpdates = asyncHandler(async (req, res) => {
   const { page = 1, limit = 20, employeeId, dateFrom, dateTo, search } = req.query;
 
   const filter = {};
-  if (req.user.role === 'employee') {
+  if (!isAdminLevel(req.user.role)) {
     filter.employee = req.user._id;
   } else if (employeeId) {
     filter.employee = employeeId;
@@ -64,10 +65,6 @@ const listDailyUpdates = asyncHandler(async (req, res) => {
 
 // POST /daily-updates
 const createDailyUpdate = asyncHandler(async (req, res) => {
-  if (req.user.role !== 'employee' && req.user.role !== 'superadmin') {
-    throw new ApiError(403, 'You do not have permission to create daily updates');
-  }
-
   const workDate = normalizeWorkDate(req.body.workDate);
   const items = parseItems(req.body.items);
   const notes = String(req.body.notes || '').trim();
@@ -80,7 +77,7 @@ const createDailyUpdate = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'Please add at least one work item');
   }
 
-  const employeeId = req.user.role === 'employee' ? req.user._id : req.body.employeeId || req.user._id;
+  const employeeId = !isAdminLevel(req.user.role) ? req.user._id : req.body.employeeId || req.user._id;
 
   const update = await DailyUpdate.create({
     employee: employeeId,
@@ -107,7 +104,7 @@ const updateDailyUpdate = asyncHandler(async (req, res) => {
   }
 
   const isOwner = update.employee.toString() === req.user._id.toString();
-  const isSuperAdmin = req.user.role === 'superadmin';
+  const isSuperAdmin = isAdminLevel(req.user.role);
 
   if (!isOwner && !isSuperAdmin) {
     throw new ApiError(403, 'You do not have permission to edit this daily update');
@@ -149,7 +146,7 @@ const deleteDailyUpdate = asyncHandler(async (req, res) => {
   }
 
   const isOwner = update.employee.toString() === req.user._id.toString();
-  const isSuperAdmin = req.user.role === 'superadmin';
+  const isSuperAdmin = isAdminLevel(req.user.role);
 
   if (!isOwner && !isSuperAdmin) {
     throw new ApiError(403, 'You do not have permission to delete this daily update');

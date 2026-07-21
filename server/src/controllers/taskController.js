@@ -7,6 +7,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { logActivity } = require('../utils/activityLogger');
 const { notifyManagersAndAdmins } = require('../utils/notify');
+const { isAdminLevel } = require('../utils/roles');
 
 const POPULATE_FIELDS = [
   { path: 'project', select: 'name' },
@@ -56,7 +57,7 @@ const listTasks = asyncHandler(async (req, res) => {
 
   const filter = { isArchived: { $ne: true } };
 
-  if (req.user.role === 'employee') {
+  if (!isAdminLevel(req.user.role)) {
     if (scope === 'pool') {
       filter.$or = [{ assignedTo: null }, { assignedTo: req.user._id }];
     } else if (scope === 'available') {
@@ -144,7 +145,7 @@ const getTask = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'Task not found');
   }
 
-  if (req.user.role === 'employee' && !isOwnedByUser(task, req.user._id)) {
+  if (!isAdminLevel(req.user.role) && !isOwnedByUser(task, req.user._id)) {
     throw new ApiError(403, 'You do not have permission to view this task');
   }
 
@@ -155,7 +156,7 @@ const getTask = asyncHandler(async (req, res) => {
 const createTask = asyncHandler(async (req, res) => {
   const body = { ...req.body };
 
-  const assignedTo = req.user.role === 'employee' ? body.assignedTo || null : body.assignedTo || req.user._id;
+  const assignedTo = !isAdminLevel(req.user.role) ? body.assignedTo || null : body.assignedTo || req.user._id;
   const status = assignedTo ? body.status || 'pending' : 'pending';
 
   if (!body.totalHours) {
@@ -196,7 +197,7 @@ const updateTask = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'Task not found');
   }
 
-  if (req.user.role === 'employee' && !isOwnedByUser(task, req.user._id)) {
+  if (!isAdminLevel(req.user.role) && !isOwnedByUser(task, req.user._id)) {
     throw new ApiError(403, 'You do not have permission to update this task');
   }
 
@@ -222,7 +223,7 @@ const updateTask = asyncHandler(async (req, res) => {
     'isArchived',
   ];
 
-  if (req.user.role === 'superadmin' && req.body.assignedTo) {
+  if (isAdminLevel(req.user.role) && req.body.assignedTo) {
     task.assignedTo = req.body.assignedTo;
   }
 
@@ -261,8 +262,8 @@ const updateTask = asyncHandler(async (req, res) => {
 
 // PATCH /tasks/:id/self-assign
 const selfAssignTask = asyncHandler(async (req, res) => {
-  if (req.user.role !== 'employee') {
-    throw new ApiError(403, 'Only employees can self-assign tasks');
+  if (isAdminLevel(req.user.role)) {
+    throw new ApiError(403, 'Admins assign tasks directly; self-assign is for employees and managers');
   }
 
   const task = await Task.findOneAndUpdate(
@@ -288,7 +289,7 @@ const deleteTask = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'Task not found');
   }
 
-  if (req.user.role === 'employee' && !isOwnedByUser(task, req.user._id)) {
+  if (!isAdminLevel(req.user.role) && !isOwnedByUser(task, req.user._id)) {
     throw new ApiError(403, 'You do not have permission to delete this task');
   }
 
@@ -317,7 +318,7 @@ const patchStatus = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'Task not found');
   }
 
-  if (req.user.role === 'employee' && !isOwnedByUser(task, req.user._id)) {
+  if (!isAdminLevel(req.user.role) && !isOwnedByUser(task, req.user._id)) {
     throw new ApiError(403, 'You do not have permission to update this task');
   }
 
@@ -353,7 +354,7 @@ const duplicateTask = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'Task not found');
   }
 
-  if (req.user.role === 'employee' && (!task.assignedTo || !task.assignedTo.equals(req.user._id))) {
+  if (!isAdminLevel(req.user.role) && (!task.assignedTo || !task.assignedTo.equals(req.user._id))) {
     throw new ApiError(403, 'You do not have permission to duplicate this task');
   }
 
@@ -379,7 +380,7 @@ const bulkUpdate = asyncHandler(async (req, res) => {
   const { ids, update } = req.body;
 
   const filter = { _id: { $in: ids } };
-  if (req.user.role === 'employee') {
+  if (!isAdminLevel(req.user.role)) {
     filter.assignedTo = req.user._id;
   }
 
@@ -401,7 +402,7 @@ const bulkDelete = asyncHandler(async (req, res) => {
   const { ids } = req.body;
 
   const filter = { _id: { $in: ids } };
-  if (req.user.role === 'employee') {
+  if (!isAdminLevel(req.user.role)) {
     filter.assignedTo = req.user._id;
   }
 

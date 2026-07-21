@@ -62,4 +62,17 @@ const sendPasswordResetEmail = async (toEmail, resetLink) => {
   return sendEmail({ to: toEmail, subject, html, text });
 };
 
-module.exports = { sendEmail, sendPasswordResetEmail };
+const sendSecurityAlertEmail = async (toEmail, { subject, lines }) => {
+  const text = lines.join('\n');
+  const html = `<p>${lines.map((l) => String(l)).join('</p><p>')}</p>`;
+
+  try {
+    return await sendEmail({ to: toEmail, subject: `[Security] ${subject}`, html, text });
+  } catch (err) {
+    // Never fail the auth flow because an alert email could not be sent
+    console.error('Failed to send security alert email:', err.message);
+    return { failed: true };
+  }
+};
+
+module.exports = { sendEmail, sendPasswordResetEmail, sendSecurityAlertEmail };

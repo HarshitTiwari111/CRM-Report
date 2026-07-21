@@ -7,7 +7,6 @@ import { useAuth } from '../../hooks/useAuth';
 import { logout as logoutAction } from '../../features/auth/authSlice';
 import { openSettingsModal } from '../../features/uiSlice';
 import { logoutApi } from '../../api/auth';
-import { store } from '../../app/store';
 import ConfirmDialog from '../ui/ConfirmDialog';
 
 export default function UserMenu() {
@@ -30,8 +29,8 @@ export default function UserMenu() {
   const handleLogout = async () => {
     setLoggingOut(true);
     try {
-      const refreshToken = store.getState().auth.refreshToken;
-      if (refreshToken) await logoutApi(refreshToken);
+      // Server revokes the HttpOnly refresh cookie's token and clears it
+      await logoutApi();
     } catch {
       // ignore network errors on logout
     } finally {

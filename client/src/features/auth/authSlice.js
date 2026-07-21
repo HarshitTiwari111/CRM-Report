@@ -1,8 +1,15 @@
 import { createSlice } from '@reduxjs/toolkit';
 
-const loadPersistedAuth = () => {
+// Security model:
+// - The refresh token lives in an HttpOnly cookie set by the server; JS never
+//   sees it, so XSS cannot steal the session.
+// - The access token is kept in memory only (this Redux store). On a page
+//   reload the app silently calls /auth/refresh to get a fresh one.
+// - Only the user profile is persisted, so the UI can render immediately
+//   while the silent refresh runs.
+const loadPersistedUser = () => {
   try {
-    const raw = localStorage.getItem('auth');
+    const raw = localStorage.getItem('authUser');
     if (!raw) return null;
     return JSON.parse(raw);
   } catch {
@@ -10,24 +17,25 @@ const loadPersistedAuth = () => {
   }
 };
 
-const persisted = loadPersistedAuth();
+// One-time migration: older builds stored tokens in localStorage
+localStorage.removeItem('auth');
+
+const persistedUser = loadPersistedUser();
 
 const initialState = {
-  user: persisted?.user || null,
-  accessToken: persisted?.accessToken || null,
-  refreshToken: persisted?.refreshToken || null,
-  isAuthenticated: Boolean(persisted?.accessToken),
+  user: persistedUser,
+  accessToken: null,
+  isAuthenticated: false,
+  // True while the app attempts a silent refresh on startup
+  isBootstrapping: Boolean(persistedUser),
 };
 
-function persist(state) {
-  localStorage.setItem(
-    'auth',
-    JSON.stringify({
-      user: state.user,
-      accessToken: state.accessToken,
-      refreshToken: state.refreshToken,
-    })
-  );
+function persistUser(user) {
+  if (user) {
+    localStorage.setItem('authUser', JSON.stringify(user));
+  } else {
+    localStorage.removeItem('authUser');
+  }
 }
 
 const authSlice = createSlice({
@@ -35,26 +43,31 @@ const authSlice = createSlice({
   initialState,
   reducers: {
     setCredentials(state, action) {
-      const { user, accessToken, refreshToken } = action.payload;
-      if (user !== undefined) state.user = user;
+      const { user, accessToken } = action.payload;
+      if (user !== undefined) {
+        state.user = user;
+        persistUser(user);
+      }
       if (accessToken !== undefined) state.accessToken = accessToken;
-      if (refreshToken !== undefined) state.refreshToken = refreshToken;
       state.isAuthenticated = Boolean(state.accessToken);
-      persist(state);
+      state.isBootstrapping = false;
     },
     updateUser(state, action) {
       state.user = { ...state.user, ...action.payload };
-      persist(state);
+      persistUser(state.user);
+    },
+    bootstrapFinished(state) {
+      state.isBootstrapping = false;
     },
     logout(state) {
       state.user = null;
       state.accessToken = null;
-      state.refreshToken = null;
       state.isAuthenticated = false;
-      localStorage.removeItem('auth');
+      state.isBootstrapping = false;
+      persistUser(null);
     },
   },
 });
 
-export const { setCredentials, updateUser, logout } = authSlice.actions;
+export const { setCredentials, updateUser, bootstrapFinished, logout } = authSlice.actions;
 export default authSlice.reducer;

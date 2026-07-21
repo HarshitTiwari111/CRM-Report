@@ -1,7 +1,23 @@
 export const ROLES = {
   SUPERADMIN: 'superadmin',
+  ADMIN: 'admin',
+  MANAGER: 'manager',
   EMPLOYEE: 'employee',
 };
+
+export const ROLE_LABELS = {
+  superadmin: 'Super Admin',
+  admin: 'Admin',
+  manager: 'Manager',
+  employee: 'Employee',
+};
+
+// Roles that get the admin UI and org-wide data access
+export const ADMIN_LEVEL_ROLES = [ROLES.SUPERADMIN, ROLES.ADMIN];
+
+export const isAdminRole = (role) => ADMIN_LEVEL_ROLES.includes(role);
+
+export const roleHome = (role) => (isAdminRole(role) ? '/admin/dashboard' : '/employee/dashboard');
 
 export const TASK_STATUS = ['pending', 'in-progress', 'completed', 'hold', 'cancelled'];
 

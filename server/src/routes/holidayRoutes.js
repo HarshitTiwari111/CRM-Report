@@ -15,7 +15,7 @@ const createHolidayValidator = [
 ];
 
 router.get('/', listHolidays);
-router.post('/', authorize('superadmin'), createHolidayValidator, validate, createHoliday);
-router.delete('/:id', authorize('superadmin'), mongoIdParamValidator, validate, deleteHoliday);
+router.post('/', authorize('superadmin', 'admin'), createHolidayValidator, validate, createHoliday);
+router.delete('/:id', authorize('superadmin', 'admin'), mongoIdParamValidator, validate, deleteHoliday);
 
 module.exports = router;

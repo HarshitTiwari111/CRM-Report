@@ -9,8 +9,8 @@ const router = express.Router();
 router.use(protect);
 
 router.get('/', listClients);
-router.post('/', authorize('superadmin'), nameBodyValidator, validate, createClient);
-router.put('/:id', authorize('superadmin'), mongoIdParamValidator, validate, updateClient);
-router.delete('/:id', authorize('superadmin'), mongoIdParamValidator, validate, deleteClient);
+router.post('/', authorize('superadmin', 'admin'), nameBodyValidator, validate, createClient);
+router.put('/:id', authorize('superadmin', 'admin'), mongoIdParamValidator, validate, updateClient);
+router.delete('/:id', authorize('superadmin', 'admin'), mongoIdParamValidator, validate, deleteClient);
 
 module.exports = router;

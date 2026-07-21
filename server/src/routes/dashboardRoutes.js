@@ -6,7 +6,7 @@ const router = express.Router();
 
 router.use(protect);
 
-router.get('/admin', authorize('superadmin'), adminDashboard);
+router.get('/admin', authorize('superadmin', 'admin'), adminDashboard);
 router.get('/employee', employeeDashboard);
 
 module.exports = router;

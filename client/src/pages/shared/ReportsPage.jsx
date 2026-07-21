@@ -61,7 +61,7 @@ function computeRange(preset, customFrom, customTo) {
 }
 
 export default function ReportsPage() {
-  const { isSuperAdmin } = useAuth();
+  const { isAdminLevel } = useAuth();
   const [preset, setPreset] = useState('monthly');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -80,13 +80,13 @@ export default function ReportsPage() {
     queryKey: ['users', 'all-employees'],
     queryFn: () => getUsers({ limit: 200 }),
     select: (res) => res.data.data,
-    enabled: isSuperAdmin,
+    enabled: isAdminLevel,
   });
   const { data: departments } = useQuery({
     queryKey: ['departments', 'all'],
     queryFn: () => getDepartments({ limit: 100 }),
     select: (res) => res.data.data,
-    enabled: isSuperAdmin,
+    enabled: isAdminLevel,
   });
   const { data: projects } = useQuery({
     queryKey: ['projects', 'all'],
@@ -136,14 +136,14 @@ export default function ReportsPage() {
   const filters = useMemo(
     () => ({
       type: reportType,
-      employeeId: isSuperAdmin ? employeeId || undefined : undefined,
+      employeeId: isAdminLevel ? employeeId || undefined : undefined,
       department: departmentId || undefined,
       project: projectId || undefined,
       status: statusFilter || undefined,
       dateFrom,
       dateTo,
     }),
-    [reportType, employeeId, departmentId, projectId, statusFilter, dateFrom, dateTo, isSuperAdmin]
+    [reportType, employeeId, departmentId, projectId, statusFilter, dateFrom, dateTo, isAdminLevel]
   );
 
   const hasActiveFilters = Boolean(employeeId || departmentId || projectId || statusFilter);
@@ -187,7 +187,7 @@ export default function ReportsPage() {
         search: '',
         employee: filters.employeeId,
         status: filters.status,
-        view: isSuperAdmin ? 'all' : 'mine',
+        view: isAdminLevel ? 'all' : 'mine',
       }),
     enabled: previewEnabled && Boolean(sheetConfig?._id),
     keepPreviousData: true,
@@ -337,7 +337,7 @@ export default function ReportsPage() {
           />
         </div>
 
-        {isSuperAdmin && (
+        {isAdminLevel && (
           <div className="min-w-[180px] flex-1">
             <Select
               placeholder="All employees"
@@ -349,7 +349,7 @@ export default function ReportsPage() {
           </div>
         )}
 
-        {isSuperAdmin && (
+        {isAdminLevel && (
           <div className="min-w-[180px] flex-1">
             <Select
               placeholder="All departments"
